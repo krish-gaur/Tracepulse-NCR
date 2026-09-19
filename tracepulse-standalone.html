@@ -1,0 +1,1644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>TracePulse NCR — Contamination Quarantine Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TracePulse NCR — Mission Control Design System
+   Dark ops aesthetic · neon telemetry · glassmorphism panels
+   ============================================================ */
+:root{
+  --bg:#04070d;
+  --bg2:#070c16;
+  --panel:rgba(13,20,36,.72);
+  --panel-solid:#0b1222;
+  --line:rgba(103,232,249,.13);
+  --line-soft:rgba(148,163,184,.10);
+  --ink:#e6f1ff;
+  --ink-dim:#8ba3c7;
+  --ink-faint:#5a708f;
+  --cyan:#22d3ee;
+  --cyan-deep:#0891b2;
+  --red:#ef4444;
+  --red-soft:#fca5a5;
+  --amber:#fbbf24;
+  --orange:#fb923c;
+  --green:#34d399;
+  --violet:#a78bfa;
+  --blue:#60a5fa;
+  --font-d:'Space Grotesk',system-ui,sans-serif;
+  --font-m:'JetBrains Mono',ui-monospace,monospace;
+  --font-s:'Instrument Serif',serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-d);
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(34,211,238,.3)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1b2b45;border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#27405f}
+
+/* ---------- background fx ---------- */
+#bgfx{position:fixed;inset:0;z-index:0;pointer-events:none}
+.grid-overlay{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(34,211,238,.045) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(34,211,238,.045) 1px,transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse 90% 70% at 50% 20%,#000 30%,transparent 100%);
+}
+.scanline{
+  position:absolute;left:0;right:0;height:120px;top:-140px;
+  background:linear-gradient(180deg,transparent,rgba(34,211,238,.05),transparent);
+  animation:scan 9s linear infinite;
+}
+@keyframes scan{0%{top:-140px}100%{top:110%}}
+.glow{position:absolute;border-radius:50%;filter:blur(90px);opacity:.16}
+.glow-a{width:560px;height:560px;background:#0e7490;top:-180px;left:-140px}
+.glow-b{width:640px;height:640px;background:#7c2d12;bottom:-260px;right:-180px;opacity:.12}
+
+/* ---------- top bar ---------- */
+#topbar{
+  position:sticky;top:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 26px;
+  background:linear-gradient(180deg,rgba(5,9,17,.94),rgba(5,9,17,.82));
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{
+  width:46px;height:46px;display:grid;place-items:center;
+  border-radius:12px;border:1px solid rgba(34,211,238,.3);
+  background:radial-gradient(circle at 30% 25%,rgba(34,211,238,.16),rgba(8,145,178,.05));
+  box-shadow:0 0 24px rgba(34,211,238,.18), inset 0 0 12px rgba(34,211,238,.06);
+}
+.brand-name{font-size:21px;font-weight:700;letter-spacing:.3px}
+.brand-name span{color:var(--cyan);text-shadow:0 0 18px rgba(34,211,238,.55)}
+.brand-sub{font-family:var(--font-m);font-size:10px;color:var(--ink-faint);letter-spacing:1.6px;text-transform:uppercase;margin-top:1px}
+.top-status{display:flex;align-items:center;gap:16px}
+.status-chip{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 14px;border-radius:99px;
+  font-family:var(--font-m);font-size:11px;font-weight:600;letter-spacing:1.4px;
+  border:1px solid rgba(52,211,153,.3);color:var(--green);
+  background:rgba(16,185,129,.07);
+  transition:all .5s;
+}
+.status-chip.alert{border-color:rgba(239,68,68,.45);color:var(--red-soft);background:rgba(239,68,68,.08);box-shadow:0 0 22px rgba(239,68,68,.22)}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 currentColor;animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.status-chip.alert .pulse-dot{animation-name:pulse-red}
+@keyframes pulse-red{0%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}70%{box-shadow:0 0 0 8px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+.clock-box{text-align:right;line-height:1.15}
+.clock-time{font-family:var(--font-m);font-size:19px;font-weight:600;color:var(--cyan);text-shadow:0 0 14px rgba(34,211,238,.4)}
+.clock-date{font-size:9px;letter-spacing:2px;color:var(--ink-faint)}
+.health-mini{
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:7px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(34,211,238,.05);
+}
+.hm-label{font-size:8px;letter-spacing:2px;color:var(--ink-faint)}
+.hm-val{font-family:var(--font-m);font-size:12px;font-weight:700;color:var(--green)}
+.hm-val.warn{color:var(--amber)}
+
+/* ---------- tabs ---------- */
+#tabs{
+  position:sticky;top:71px;z-index:40;
+  display:flex;gap:8px;padding:10px 26px;
+  background:rgba(5,9,17,.8);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line-soft);
+}
+.tab{
+  display:flex;align-items:center;gap:9px;
+  padding:9px 18px;border-radius:10px;cursor:pointer;
+  background:transparent;border:1px solid transparent;
+  color:var(--ink-dim);font-family:var(--font-d);font-size:13.5px;font-weight:600;letter-spacing:.3px;
+  transition:all .22s;
+}
+.tab .ti{font-family:var(--font-m);font-size:10px;color:var(--ink-faint)}
+.tab:hover{color:var(--ink);background:rgba(34,211,238,.06)}
+.tab.active{
+  color:var(--ink);border-color:rgba(34,211,238,.35);
+  background:linear-gradient(180deg,rgba(34,211,238,.12),rgba(34,211,238,.04));
+  box-shadow:0 0 18px rgba(34,211,238,.12), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.tab.active .ti{color:var(--cyan)}
+
+/* ---------- layout ---------- */
+#main{position:relative;z-index:1;padding:22px 26px 40px;max-width:1560px;margin:0 auto}
+.view{display:none;animation:viewIn .45s cubic-bezier(.2,.7,.3,1)}
+.view.active{display:block}
+@keyframes viewIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  backdrop-filter:blur(10px);
+  box-shadow:0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
+  padding:18px;
+}
+.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.panel-head h3{font-size:14px;font-weight:700;letter-spacing:.4px}
+.tag{
+  font-family:var(--font-m);font-size:9px;font-weight:600;letter-spacing:1.6px;
+  padding:4px 9px;border-radius:6px;color:var(--cyan);
+  border:1px solid rgba(34,211,238,.25);background:rgba(34,211,238,.06);
+}
+.tag.danger{color:var(--red-soft);border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.07)}
+.live-tag{display:flex;align-items:center;gap:7px;font-family:var(--font-m);font-size:9px;letter-spacing:1.8px;color:var(--red-soft)}
+.hint{font-size:12.5px;color:var(--ink-dim);line-height:1.6;margin-bottom:16px}
+
+/* ---------- KPI row ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+.kpi{
+  position:relative;overflow:hidden;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:16px 18px;backdrop-filter:blur(10px);
+  transition:transform .25s, border-color .25s;
+}
+.kpi:hover{transform:translateY(-3px);border-color:rgba(34,211,238,.35)}
+.kpi::after{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(34,211,238,.6),transparent);opacity:.5}
+.kpi-label{font-family:var(--font-m);font-size:9px;letter-spacing:1.8px;color:var(--ink-faint);margin-bottom:9px}
+.kpi-value{font-family:var(--font-m);font-size:29px;font-weight:700;color:var(--ink);line-height:1;text-shadow:0 0 20px rgba(34,211,238,.2)}
+.kpi-foot{font-size:10.5px;color:var(--ink-faint);margin-top:8px}
+.kpi-accent{border-color:rgba(239,68,68,.35)}
+.kpi-accent::after{background:linear-gradient(90deg,transparent,rgba(239,68,68,.7),transparent)}
+.kpi-accent .kpi-value{color:var(--red-soft);text-shadow:0 0 20px rgba(239,68,68,.35)}
+
+/* ---------- dashboard grid ---------- */
+.dash-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px}
+.cluster-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cluster-card{
+  border:1px solid var(--line-soft);border-radius:12px;padding:14px;
+  background:linear-gradient(180deg,rgba(255,255,255,.02),transparent);
+  transition:border-color .25s;
+}
+.cluster-card:hover{border-color:rgba(34,211,238,.3)}
+.cc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.cc-name{font-weight:700;font-size:13.5px}
+.cc-badge{font-family:var(--font-m);font-size:9px;padding:3px 8px;border-radius:99px;letter-spacing:1px}
+.cc-badge.ok{color:var(--green);background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25)}
+.cc-badge.warn{color:var(--amber);background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3)}
+.cc-badge.bad{color:var(--red-soft);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35)}
+.cc-meta{font-family:var(--font-m);font-size:10.5px;color:var(--ink-dim);display:flex;flex-direction:column;gap:3px}
+.cc-kitchens{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.cc-k{font-family:var(--font-m);font-size:9px;padding:2px 7px;border-radius:5px;background:rgba(96,165,250,.1);color:var(--blue);border:1px solid rgba(96,165,250,.2)}
+.cc-k.flagged{background:rgba(239,68,68,.12);color:var(--red-soft);border-color:rgba(239,68,68,.35)}
+
+.mesh-list{display:flex;flex-direction:column;gap:8px}
+.mesh-row{
+  display:flex;align-items:center;gap:12px;
+  padding:9px 12px;border-radius:9px;border:1px solid var(--line-soft);
+  background:rgba(255,255,255,.015);font-size:12px;
+}
+.mesh-ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:13px;flex-shrink:0}
+.mesh-name{font-weight:600;flex:1}
+.mesh-sub{font-family:var(--font-m);font-size:9.5px;color:var(--ink-faint)}
+
+/* ---------- incident feed ---------- */
+.incident-feed{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;padding-right:4px}
+.feed-item{
+  display:flex;gap:11px;padding:11px 13px;border-radius:10px;
+  border:1px solid var(--line-soft);border-left:3px solid var(--ink-faint);
+  background:rgba(255,255,255,.015);animation:feedIn .5s cubic-bezier(.2,.7,.3,1);
+}
+@keyframes feedIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.feed-item.crit{border-left-color:var(--red)}
+.feed-item.warn{border-left-color:var(--amber)}
+.feed-item.ok{border-left-color:var(--green)}
+.feed-item.info{border-left-color:var(--cyan)}
+.feed-time{font-family:var(--font-m);font-size:9.5px;color:var(--ink-faint);white-space:nowrap;padding-top:2px}
+.feed-body{font-size:11.5px;line-height:1.5;color:var(--ink-dim)}
+.feed-body b{color:var(--ink)}
+.telemetry{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.tele-tile{border:1px solid var(--line-soft);border-radius:9px;padding:9px 11px;background:rgba(255,255,255,.015)}
+.tele-k{font-family:var(--font-m);font-size:8.5px;letter-spacing:1.4px;color:var(--ink-faint)}
+.tele-v{font-family:var(--font-m);font-size:15px;font-weight:700;margin-top:3px}
+.tele-v.g{color:var(--green)} .tele-v.c{color:var(--cyan)} .tele-v.a{color:var(--amber)}
+
+/* ---------- blast radius ---------- */
+.blast-layout{display:grid;grid-template-columns:390px 1fr;gap:16px;align-items:start}
+.field-label{font-family:var(--font-m);font-size:9.5px;letter-spacing:1.8px;color:var(--ink-faint);display:block;margin:14px 0 8px}
+.batch-picker{display:flex;flex-direction:column;gap:8px}
+.batch-opt{
+  display:flex;align-items:center;gap:11px;
+  padding:11px 13px;border-radius:10px;cursor:pointer;
+  border:1px solid var(--line-soft);background:rgba(255,255,255,.015);
+  transition:all .2s;
+}
+.batch-opt:hover{border-color:rgba(34,211,238,.3)}
+.batch-opt.selected{border-color:rgba(239,68,68,.55);background:rgba(239,68,68,.07);box-shadow:0 0 16px rgba(239,68,68,.12)}
+.batch-opt.clean.selected{border-color:rgba(52,211,153,.5);background:rgba(52,211,153,.06);box-shadow:none}
+.bo-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.bo-dot.flagged{background:var(--red);box-shadow:0 0 10px rgba(239,68,68,.7);animation:blink 1.2s infinite}
+.bo-dot.suspect{background:var(--amber)}
+.bo-dot.clear{background:var(--green)}
+@keyframes blink{50%{opacity:.35}}
+.bo-main{flex:1}
+.bo-id{font-family:var(--font-m);font-size:12px;font-weight:700}
+.bo-name{font-size:10.5px;color:var(--ink-dim);margin-top:1px}
+.bo-status{font-family:var(--font-m);font-size:8.5px;letter-spacing:1.2px;padding:3px 7px;border-radius:5px}
+.bo-status.q{color:var(--red-soft);background:rgba(239,68,68,.12)}
+.bo-status.s{color:var(--amber);background:rgba(251,191,36,.1)}
+.bo-status.c{color:var(--green);background:rgba(52,211,153,.1)}
+
+.incident-banner{
+  display:flex;gap:12px;align-items:center;margin-top:16px;
+  padding:13px 15px;border-radius:11px;
+  border:1px solid rgba(239,68,68,.4);background:linear-gradient(90deg,rgba(239,68,68,.14),rgba(239,68,68,.04));
+  animation:bannerIn .4s;
+}
+@keyframes bannerIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.ib-icon{font-size:22px;color:var(--red);animation:blink 1s infinite}
+.ib-title{font-family:var(--font-m);font-size:11px;font-weight:700;letter-spacing:1.4px;color:var(--red-soft)}
+.ib-sub{font-size:11px;color:var(--ink-dim);margin-top:2px}
+
+.btn-primary{
+  width:100%;margin-top:18px;padding:15px 18px;cursor:pointer;
+  border:none;border-radius:12px;
+  font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:.8px;color:#fff;
+  background:linear-gradient(135deg,#dc2626,#b91c1c);
+  box-shadow:0 8px 28px rgba(239,68,68,.35), inset 0 1px 0 rgba(255,255,255,.2);
+  transition:all .2s;display:flex;align-items:center;justify-content:center;gap:10px;
+}
+.btn-primary:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 34px rgba(239,68,68,.5)}
+.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+.btn-primary.tracing{background:linear-gradient(135deg,#0891b2,#0e7490);box-shadow:0 8px 28px rgba(34,211,238,.35)}
+.btn-icon{font-size:16px}
+
+.latency-box{
+  margin-top:18px;padding:16px;border-radius:12px;text-align:center;
+  border:1px solid rgba(34,211,238,.3);background:rgba(34,211,238,.05);
+}
+.lat-num{font-family:var(--font-m);font-size:42px;font-weight:700;color:var(--cyan);text-shadow:0 0 26px rgba(34,211,238,.55);line-height:1}
+.lat-cap{font-family:var(--font-m);font-size:10px;letter-spacing:1.4px;color:var(--ink-dim);margin-top:6px}
+.lat-bar{height:5px;border-radius:99px;background:rgba(34,211,238,.12);margin:12px 0 8px;overflow:hidden}
+.lat-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--cyan-deep),var(--cyan));box-shadow:0 0 12px rgba(34,211,238,.7);transition:width 1.1s cubic-bezier(.2,.7,.3,1)}
+.lat-note{font-family:var(--font-m);font-size:9px;color:var(--ink-faint);letter-spacing:.6px}
+
+.blast-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:16px}
+.bkpi{border:1px solid var(--line-soft);border-radius:10px;padding:11px 8px;text-align:center;background:rgba(255,255,255,.015)}
+.bkpi-v{font-family:var(--font-m);font-size:21px;font-weight:700;color:var(--ink)}
+.bkpi-l{font-size:9px;letter-spacing:1.2px;color:var(--ink-faint);margin-top:4px;text-transform:uppercase}
+.bkpi.danger .bkpi-v{color:var(--red-soft)}
+
+.status-dist{margin-top:16px}
+.sd-title{font-family:var(--font-m);font-size:9px;letter-spacing:1.8px;color:var(--ink-faint);margin-bottom:8px}
+.sd-bar{display:flex;height:14px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.04)}
+.sd-seg{height:100%;transition:width 1s cubic-bezier(.2,.7,.3,1)}
+.seg-prep{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.seg-transit{background:linear-gradient(90deg,#ea580c,#fb923c)}
+.seg-deliv{background:linear-gradient(90deg,#b91c1c,#ef4444)}
+.sd-legend{display:flex;gap:14px;margin-top:9px;flex-wrap:wrap}
+.sd-l{font-family:var(--font-m);font-size:9.5px;color:var(--ink-dim);display:flex;align-items:center;gap:6px}
+.sd-l i{width:8px;height:8px;border-radius:2px;display:inline-block}
+
+.breach-note{
+  margin-top:15px;padding:12px 14px;border-radius:10px;
+  font-size:11.5px;line-height:1.55;color:var(--ink-dim);
+  border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.06);
+}
+.breach-note b{color:var(--amber)}
+
+/* ---------- graph ---------- */
+.blast-graph{min-height:640px;display:flex;flex-direction:column}
+.graph-wrap{position:relative;flex:1;min-height:520px;border-radius:12px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%,rgba(14,116,144,.08),rgba(4,7,13,.4) 70%);
+  border:1px solid var(--line-soft);
+}
+#graph-canvas{position:absolute;inset:0;width:100%;height:100%}
+.graph-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--ink-faint);text-align:center;z-index:2;pointer-events:none}
+.ge-icon{font-size:44px;color:rgba(34,211,238,.35);animation:float 3s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px)}}
+.graph-empty div:nth-child(2){font-weight:600;font-size:14px;color:var(--ink-dim)}
+.ge-sub{font-size:11px}
+.graph-legend{position:absolute;left:12px;bottom:12px;display:flex;gap:9px;flex-wrap:wrap;z-index:3;
+  padding:8px 11px;border-radius:9px;background:rgba(5,9,17,.8);border:1px solid var(--line-soft);backdrop-filter:blur(8px)}
+.lg-item{display:flex;align-items:center;gap:6px;font-family:var(--font-m);font-size:9px;color:var(--ink-dim);letter-spacing:.6px}
+.lg-item i{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+.affected-table-wrap{margin-top:14px}
+.ledger{width:100%;border-collapse:collapse;font-size:11px}
+.ledger th{font-family:var(--font-m);font-size:8.5px;letter-spacing:1.6px;color:var(--ink-faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+.ledger td{padding:7px 10px;border-bottom:1px solid var(--line-soft);font-family:var(--font-m);font-size:10.5px;color:var(--ink-dim)}
+.ledger tr:hover td{background:rgba(34,211,238,.04);color:var(--ink)}
+.ledger .st{padding:2px 8px;border-radius:5px;font-size:8.5px;letter-spacing:1px;font-weight:700}
+.st.PREPARING{color:var(--amber);background:rgba(251,191,36,.12)}
+.st.OUT_FOR_DELIVERY{color:var(--orange);background:rgba(251,146,60,.12)}
+.st.DELIVERED{color:var(--red-soft);background:rgba(239,68,68,.12)}
+.st.INTERCEPTED{color:var(--cyan);background:rgba(34,211,238,.12)}
+
+/* ---------- containment ---------- */
+.contain-head{display:grid;grid-template-columns:1fr 1.4fr;gap:16px;margin-bottom:16px}
+.sev-score{font-family:var(--font-m);font-size:52px;font-weight:700;line-height:1;text-shadow:0 0 30px rgba(239,68,68,.4)}
+.sev-class{font-family:var(--font-m);font-size:11px;letter-spacing:2.4px;margin-top:8px;color:var(--ink-dim)}
+.sev-formula{font-family:var(--font-m);font-size:10.5px;color:var(--ink-faint);margin-top:13px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft);line-height:1.6}
+.surgical-copy{font-size:12.5px;line-height:1.65;color:var(--ink-dim)}
+.surgical-copy b{color:var(--ink)} .surgical-copy b.ok{color:var(--green)}
+.surgical-copy code{font-family:var(--font-m);font-size:10.5px;color:var(--cyan);background:rgba(34,211,238,.08);padding:2px 6px;border-radius:5px}
+.roi-bars{margin-top:16px;display:flex;flex-direction:column;gap:11px}
+.roi-row{display:grid;grid-template-columns:130px 1fr 64px;align-items:center;gap:11px}
+.roi-label{font-size:10.5px;color:var(--ink-dim)}
+.roi-track{height:9px;border-radius:99px;background:rgba(255,255,255,.05);overflow:hidden}
+.roi-fill{height:100%;border-radius:99px}
+.roi-fill.bad{background:linear-gradient(90deg,#b91c1c,#ef4444);box-shadow:0 0 12px rgba(239,68,68,.5)}
+.roi-fill.good{background:linear-gradient(90deg,#059669,#34d399);box-shadow:0 0 12px rgba(52,211,153,.5)}
+.roi-val{font-family:var(--font-m);font-size:11px;font-weight:700;text-align:right}
+.roi-val.ok{color:var(--green)}
+
+.zones{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.zone{
+  position:relative;overflow:hidden;
+  border-radius:16px;padding:18px;border:1px solid var(--line);
+  background:var(--panel);backdrop-filter:blur(10px);
+  transition:transform .25s;
+}
+.zone:hover{transform:translateY(-3px)}
+.zone::before{content:"";position:absolute;top:0;left:0;right:0;height:3px}
+.zone.z1::before{background:linear-gradient(90deg,#f59e0b,transparent)}
+.zone.z2::before{background:linear-gradient(90deg,#fb923c,transparent)}
+.zone.z3::before{background:linear-gradient(90deg,#ef4444,transparent)}
+.zone-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:11px}
+.zone-num{font-family:var(--font-m);font-size:9px;letter-spacing:2px;color:var(--ink-faint)}
+.zone-title{font-size:15px;font-weight:700;margin-top:3px}
+.zone-count{text-align:right}
+.zc-num{font-family:var(--font-m);font-size:26px;font-weight:700;line-height:1}
+.zc-l{font-size:9px;color:var(--ink-faint);letter-spacing:1px;margin-top:3px}
+.zone.z1 .zc-num{color:var(--amber)} .zone.z2 .zc-num{color:var(--orange)} .zone.z3 .zc-num{color:var(--red-soft)}
+.zone-desc{font-size:11.5px;color:var(--ink-dim);line-height:1.6;min-height:54px}
+.zone-directive{font-family:var(--font-m);font-size:10px;color:var(--cyan);margin:11px 0;padding:9px 11px;border-radius:8px;background:rgba(34,211,238,.05);border:1px solid rgba(34,211,238,.18);line-height:1.5}
+.btn-zone{
+  width:100%;padding:12px;border-radius:10px;cursor:pointer;
+  font-family:var(--font-d);font-size:12.5px;font-weight:700;letter-spacing:.6px;color:#fff;
+  border:1px solid rgba(255,255,255,.15);transition:all .2s;
+}
+.zone.z1 .btn-zone{background:linear-gradient(135deg,#b45309,#d97706)}
+.zone.z2 .btn-zone{background:linear-gradient(135deg,#c2410c,#ea580c)}
+.zone.z3 .btn-zone{background:linear-gradient(135deg,#b91c1c,#dc2626)}
+.btn-zone:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px)}
+.btn-zone:disabled{opacity:.45;cursor:not-allowed}
+.btn-zone.done{background:linear-gradient(135deg,#065f46,#059669)!important;cursor:default}
+.zone-status{font-family:var(--font-m);font-size:9px;letter-spacing:1.4px;text-align:center;margin-top:9px;color:var(--ink-faint);min-height:12px}
+.zone-status.ok{color:var(--green)}
+
+.containment-log{display:flex;flex-direction:column;gap:7px;max-height:220px;overflow-y:auto}
+.log-empty{font-size:12px;color:var(--ink-faint);font-style:italic}
+.log-item{display:flex;gap:11px;font-family:var(--font-m);font-size:10.5px;padding:9px 12px;border-radius:8px;background:rgba(255,255,255,.02);border:1px solid var(--line-soft);animation:feedIn .4s}
+.log-time{color:var(--ink-faint);white-space:nowrap}
+.log-code{color:var(--cyan);font-weight:700;white-space:nowrap}
+.log-msg{color:var(--ink-dim)}
+
+/* ---------- reverse trace ---------- */
+.reverse-layout{display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:start}
+.order-input-row{display:flex;gap:9px}
+.order-input-row input{
+  flex:1;padding:13px 15px;border-radius:10px;
+  background:rgba(4,8,16,.7);border:1px solid var(--line);
+  color:var(--ink);font-family:var(--font-m);font-size:13px;outline:none;transition:border-color .2s;
+}
+.order-input-row input:focus{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.order-input-row .btn-primary{width:auto;margin-top:0;padding:13px 22px}
+.order-chips{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.order-chip{
+  font-family:var(--font-m);font-size:10px;padding:6px 11px;border-radius:99px;cursor:pointer;
+  border:1px solid var(--line-soft);color:var(--ink-dim);background:rgba(255,255,255,.02);transition:all .2s;
+}
+.order-chip:hover{border-color:rgba(34,211,238,.4);color:var(--cyan)}
+.rev-latency{margin-top:18px;font-family:var(--font-m);font-size:11px;color:var(--ink-dim);padding:12px 14px;border-radius:10px;border:1px solid rgba(34,211,238,.25);background:rgba(34,211,238,.04)}
+.rl-num{font-size:24px;font-weight:700;color:var(--cyan);text-shadow:0 0 18px rgba(34,211,238,.5)}
+.rev-verdict{margin-top:14px;padding:14px;border-radius:11px;font-size:12px;line-height:1.6;animation:bannerIn .4s}
+.rev-verdict.bad{border:1px solid rgba(239,68,68,.45);background:rgba(239,68,68,.08);color:var(--ink-dim)}
+.rev-verdict.good{border:1px solid rgba(52,211,153,.4);background:rgba(52,211,153,.07);color:var(--ink-dim)}
+.rev-verdict b{color:var(--ink)}
+.path-track{position:relative;min-height:480px;padding:6px 4px}
+.path-node{
+  position:relative;display:flex;gap:15px;padding:13px 15px;margin-bottom:4px;
+  border-radius:12px;border:1px solid var(--line-soft);background:rgba(255,255,255,.015);
+  opacity:0;transform:translateY(14px);transition:all .5s cubic-bezier(.2,.7,.3,1);
+}
+.path-node.shown{opacity:1;transform:none}
+.path-node.flagged{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.06);box-shadow:0 0 20px rgba(239,68,68,.15)}
+.pn-ico{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-size:19px;flex-shrink:0;border:1px solid var(--line)}
+.pn-body{flex:1;min-width:0}
+.pn-ent{font-family:var(--font-m);font-size:8.5px;letter-spacing:1.8px;color:var(--ink-faint)}
+.pn-name{font-weight:700;font-size:13.5px;margin-top:2px}
+.pn-meta{font-family:var(--font-m);font-size:10px;color:var(--ink-dim);margin-top:4px;line-height:1.5}
+.pn-hop{font-family:var(--font-m);font-size:9px;color:var(--ink-faint);align-self:center}
+.path-connector{width:2px;height:16px;margin:0 0 4px 34px;background:linear-gradient(180deg,rgba(34,211,238,.5),rgba(34,211,238,.12));border-radius:2px}
+
+/* ---------- toast ---------- */
+#toast-stack{position:fixed;right:22px;bottom:22px;z-index:200;display:flex;flex-direction:column;gap:10px;max-width:380px}
+.toast{
+  padding:13px 16px;border-radius:12px;font-size:12.5px;line-height:1.5;
+  background:rgba(11,18,34,.95);border:1px solid var(--line);color:var(--ink-dim);
+  box-shadow:0 16px 40px rgba(0,0,0,.5);backdrop-filter:blur(10px);
+  animation:toastIn .4s cubic-bezier(.2,.7,.3,1);
+}
+.toast b{color:var(--ink)}
+.toast.ok{border-color:rgba(52,211,153,.45)} .toast.ok::before{content:"✓ ";color:var(--green);font-weight:700}
+.toast.err{border-color:rgba(239,68,68,.5)} .toast.err::before{content:"⚠ ";color:var(--red)}
+.toast.info{border-color:rgba(34,211,238,.4)} .toast.info::before{content:"◈ ";color:var(--cyan)}
+@keyframes toastIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+.toast.bye{opacity:0;transform:translateX(30px);transition:all .4s}
+
+/* ---------- auto-demo FAB ---------- */
+#btn-autodemo{
+  position:fixed;left:22px;bottom:22px;z-index:200;cursor:pointer;
+  padding:14px 22px;border-radius:99px;border:1px solid rgba(34,211,238,.5);
+  font-family:var(--font-m);font-size:12px;font-weight:700;letter-spacing:1.6px;color:#04121a;
+  background:linear-gradient(135deg,#67e8f9,#22d3ee);
+  box-shadow:0 10px 34px rgba(34,211,238,.4), inset 0 1px 0 rgba(255,255,255,.5);
+  transition:all .25s;animation:fabGlow 2.6s ease-in-out infinite;
+}
+@keyframes fabGlow{50%{box-shadow:0 10px 44px rgba(34,211,238,.65), inset 0 1px 0 rgba(255,255,255,.5)}}
+#btn-autodemo:hover{transform:translateY(-3px) scale(1.03)}
+#btn-autodemo.running{background:linear-gradient(135deg,#fca5a5,#ef4444);border-color:rgba(239,68,68,.6);color:#fff;box-shadow:0 10px 34px rgba(239,68,68,.45);animation:none}
+
+/* ---------- footer ---------- */
+#footer{
+  position:relative;z-index:1;display:flex;justify-content:space-between;
+  padding:16px 26px;border-top:1px solid var(--line-soft);
+  font-family:var(--font-m);font-size:9.5px;letter-spacing:1px;color:var(--ink-faint);
+}
+
+/* ---------- responsive ---------- */
+@media(max-width:1180px){
+  .kpi-row{grid-template-columns:repeat(3,1fr)}
+  .dash-grid,.blast-layout,.contain-head,.reverse-layout{grid-template-columns:1fr}
+  .zones{grid-template-columns:1fr}
+}
+
+</style>
+</head>
+<body>
+<div id="bgfx">
+  <div class="grid-overlay"></div>
+  <div class="scanline"></div>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+</div>
+
+<!-- ============ TOP COMMAND BAR ============ -->
+<header id="topbar">
+  <div class="brand">
+    <div class="logo">
+      <svg viewBox="0 0 40 40" width="34" height="34">
+        <defs>
+          <radialGradient id="lg" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#67e8f9"/><stop offset="100%" stop-color="#0891b2"/>
+          </radialGradient>
+        </defs>
+        <circle cx="20" cy="20" r="17" fill="none" stroke="url(#lg)" stroke-width="2" opacity=".9"/>
+        <path d="M6 20 L13 20 L16 12 L20 27 L23 17 L25 20 L34 20" fill="none" stroke="#22d3ee" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="20" cy="20" r="2.6" fill="#ef4444"><animate attributeName="opacity" values="1;.2;1" dur="1.2s" repeatCount="indefinite"/></circle>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <div class="brand-name">TracePulse <span>NCR</span></div>
+      <div class="brand-sub">Sub-Second Contamination Quarantine Engine</div>
+    </div>
+  </div>
+
+  <div class="top-status">
+    <div class="status-chip" id="net-chip">
+      <span class="pulse-dot"></span><span id="net-label">NETWORK NOMINAL</span>
+    </div>
+    <div class="clock-box">
+      <div class="clock-time" id="clock-time">--:--:--</div>
+      <div class="clock-date" id="clock-date">DELHI NCR · IST</div>
+    </div>
+    <div class="health-mini" id="health-mini" title="Graph engine status">
+      <span class="hm-label">GRAPH</span><span class="hm-val" id="hm-val">—</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ NAV TABS ============ -->
+<nav id="tabs">
+  <button class="tab active" data-tab="dashboard"><span class="ti">01</span>Operations Overview</button>
+  <button class="tab" data-tab="blast"><span class="ti">02</span>Blast Radius</button>
+  <button class="tab" data-tab="containment"><span class="ti">03</span>Containment</button>
+  <button class="tab" data-tab="reverse"><span class="ti">04</span>Reverse Trace</button>
+</nav>
+
+<main id="main">
+
+<!-- ===================== DASHBOARD ===================== -->
+<section class="view active" id="view-dashboard">
+  <div class="kpi-row" id="kpi-row">
+    <div class="kpi"><div class="kpi-label">NETWORK STATUS</div><div class="kpi-value" id="kpi-net">—</div><div class="kpi-foot" id="kpi-net-foot">loading…</div></div>
+    <div class="kpi"><div class="kpi-label">NCR KITCHENS ACTIVE</div><div class="kpi-value" id="kpi-kitchens">—</div><div class="kpi-foot" id="kpi-kitchens-foot">cloud kitchens</div></div>
+    <div class="kpi"><div class="kpi-label">BATCHES TRACKED</div><div class="kpi-value" id="kpi-batches">—</div><div class="kpi-foot">ingredient lots</div></div>
+    <div class="kpi"><div class="kpi-label">ORDERS INDEXED</div><div class="kpi-value" id="kpi-orders">—</div><div class="kpi-foot">today · Delhi NCR</div></div>
+    <div class="kpi kpi-accent"><div class="kpi-label">ACTIVE INCIDENTS</div><div class="kpi-value" id="kpi-incidents">—</div><div class="kpi-foot" id="kpi-incidents-foot">quarantine queue</div></div>
+  </div>
+
+  <div class="dash-grid">
+    <div class="panel cluster-panel">
+      <div class="panel-head"><h3>Delhi NCR Cluster Segmentation</h3><span class="tag">GEO-ZONES</span></div>
+      <div id="cluster-cards" class="cluster-cards"></div>
+      <div class="panel-head" style="margin-top:18px"><h3>Supplier & Warehouse Mesh</h3><span class="tag">UPSTREAM</span></div>
+      <div id="mesh-list" class="mesh-list"></div>
+    </div>
+
+    <div class="panel feed-panel">
+      <div class="panel-head"><h3>Live Incident Feed</h3><span class="live-tag"><span class="pulse-dot"></span>LIVE</span></div>
+      <div id="incident-feed" class="incident-feed"></div>
+      <div class="panel-head" style="margin-top:14px"><h3>System Telemetry</h3><span class="tag">API</span></div>
+      <div id="telemetry" class="telemetry"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== BLAST RADIUS ===================== -->
+<section class="view" id="view-blast">
+  <div class="blast-layout">
+    <div class="blast-controls panel">
+      <div class="panel-head"><h3>Rapid Incident Console</h3><span class="tag danger">QA LAB</span></div>
+      <p class="hint">Select a flagged ingredient batch, then initiate a downstream blast-radius traversal across the full supply graph.</p>
+
+      <label class="field-label">BATCH ID</label>
+      <div class="batch-picker" id="batch-picker"></div>
+
+      <div class="incident-banner" id="incident-banner" hidden>
+        <div class="ib-icon">⚠</div>
+        <div>
+          <div class="ib-title" id="ib-title">FSSAI LAB ALERT</div>
+          <div class="ib-sub" id="ib-sub">Batch flagged positive</div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-blast">
+        <span class="btn-icon">◎</span> INITIATE BLAST RADIUS ANALYSIS
+      </button>
+
+      <div class="latency-box" id="latency-box" hidden>
+        <div class="lat-num" id="lat-num">—</div>
+        <div class="lat-cap">graph traversal · <span id="lat-hops">5 hops</span></div>
+        <div class="lat-bar"><div class="lat-fill" id="lat-fill"></div></div>
+        <div class="lat-note">vs 45–180s relational 8-table join</div>
+      </div>
+
+      <div class="blast-kpis" id="blast-kpis" hidden>
+        <div class="bkpi"><div class="bkpi-v" id="bk-orders">0</div><div class="bkpi-l">Orders hit</div></div>
+        <div class="bkpi"><div class="bkpi-v" id="bk-kitchens">0</div><div class="bkpi-l">Kitchens</div></div>
+        <div class="bkpi"><div class="bkpi-v" id="bk-customers">0</div><div class="bkpi-l">Consumers</div></div>
+        <div class="bkpi danger"><div class="bkpi-v" id="bk-gmv">₹0</div><div class="bkpi-l">GMV at risk</div></div>
+      </div>
+
+      <div class="status-dist" id="status-dist" hidden>
+        <div class="sd-title">ORDER DISPOSITION</div>
+        <div class="sd-bar">
+          <div class="sd-seg seg-prep" id="seg-prep"></div>
+          <div class="sd-seg seg-transit" id="seg-transit"></div>
+          <div class="sd-seg seg-deliv" id="seg-deliv"></div>
+        </div>
+        <div class="sd-legend" id="sd-legend"></div>
+      </div>
+
+      <div class="breach-note" id="breach-note" hidden></div>
+    </div>
+
+    <div class="blast-graph panel">
+      <div class="panel-head">
+        <h3 id="graph-title">Downstream Propagation Graph</h3>
+        <span class="tag" id="graph-tag">IDLE</span>
+      </div>
+      <div class="graph-wrap">
+        <canvas id="graph-canvas"></canvas>
+        <div class="graph-empty" id="graph-empty">
+          <div class="ge-icon">⬡</div>
+          <div>Awaiting traversal</div>
+          <div class="ge-sub">Initiate blast radius to render the contamination tree</div>
+        </div>
+        <div class="graph-legend" id="graph-legend">
+          <span class="lg-item"><i style="background:#ef4444"></i>Batch</span>
+          <span class="lg-item"><i style="background:#a78bfa"></i>Warehouse</span>
+          <span class="lg-item"><i style="background:#fb923c"></i>Shipment</span>
+          <span class="lg-item"><i style="background:#34d399"></i>Kitchen</span>
+          <span class="lg-item"><i style="background:#fbbf24"></i>Dish</span>
+          <span class="lg-item"><i style="background:#60a5fa"></i>Orders</span>
+        </div>
+      </div>
+      <div class="affected-table-wrap" id="affected-table-wrap" hidden>
+        <div class="panel-head"><h3>Affected Order Ledger</h3><span class="tag" id="ledger-count">0</span></div>
+        <table class="ledger" id="ledger-table">
+          <thead><tr><th>ORDER</th><th>DISH</th><th>KITCHEN</th><th>STATUS</th><th>GMV</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTAINMENT ===================== -->
+<section class="view" id="view-containment">
+  <div class="contain-head">
+    <div class="panel severity-panel">
+      <div class="panel-head"><h3>Risk Severity Model</h3><span class="tag danger">DETERMINISTIC</span></div>
+      <div class="sev-score" id="sev-score">—</div>
+      <div class="sev-class" id="sev-class">Run blast radius first</div>
+      <div class="sev-formula" id="sev-formula"></div>
+    </div>
+    <div class="panel surgical-panel">
+      <div class="panel-head"><h3>Surgical vs Blanket Recall</h3><span class="tag">ROI</span></div>
+      <div class="surgical-copy">
+        A blanket shutdown discards <b>₹80,000</b> of safe food. TracePulse isolates only the recipes mapped
+        via <code>[:USES_BATCH]</code> to the flagged batch — <b class="ok">biryani, dal & breads stay LIVE</b>.
+      </div>
+      <div class="roi-bars">
+        <div class="roi-row"><span class="roi-label">Blanket recall loss</span><div class="roi-track"><div class="roi-fill bad" style="width:100%"></div></div><span class="roi-val">₹80.0k</span></div>
+        <div class="roi-row"><span class="roi-label">TracePulse loss</span><div class="roi-track"><div class="roi-fill good" id="roi-surgical" style="width:3%"></div></div><span class="roi-val ok" id="roi-surgical-val">≈₹0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="zones" id="zones"></div>
+
+  <div class="panel audit-panel">
+    <div class="panel-head"><h3>Containment Action Log</h3><span class="live-tag"><span class="pulse-dot"></span>AUDIT</span></div>
+    <div id="containment-log" class="containment-log"><div class="log-empty">No containment directives issued yet.</div></div>
+  </div>
+</section>
+
+<!-- ===================== REVERSE TRACE ===================== -->
+<section class="view" id="view-reverse">
+  <div class="reverse-layout">
+    <div class="panel reverse-controls">
+      <div class="panel-head"><h3>Reverse Root-Cause Trace</h3><span class="tag">CUSTOMER → FARM</span></div>
+      <p class="hint">A consumer reports illness. Enter their order ID to traverse upstream and pinpoint the exact source batch, warehouse, and supplier.</p>
+      <label class="field-label">ORDER ID</label>
+      <div class="order-input-row">
+        <input type="text" id="order-input" placeholder="e.g. ORD-8601" autocomplete="off"/>
+        <button class="btn-primary" id="btn-reverse"><span class="btn-icon">⇄</span> TRACE</button>
+      </div>
+      <div class="order-chips" id="order-chips"></div>
+      <div class="rev-latency" id="rev-latency" hidden>
+        <span class="rl-num" id="rl-num">—</span> upstream traversal · <span id="rl-hops">7 hops</span>
+      </div>
+      <div class="rev-verdict" id="rev-verdict" hidden></div>
+    </div>
+    <div class="panel reverse-path">
+      <div class="panel-head"><h3>Chain of Custody</h3><span class="tag" id="rev-tag">IDLE</span></div>
+      <div class="path-track" id="path-track">
+        <div class="graph-empty" id="rev-empty"><div class="ge-icon">⇄</div><div>No trace run yet</div><div class="ge-sub">Enter an order ID to reconstruct the farm-to-fork path</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div id="toast-stack"></div>
+
+<button id="btn-autodemo" title="Plays the full judging storyline: lab alert → blast radius → surgical containment → reverse trace">
+  ▶ AUTO-RUN 4-MIN DEMO
+</button>
+
+<footer id="footer">
+  <span>TracePulse NCR · Neo4j index-free adjacency · FSS Act §28 trace-ready</span>
+  <span id="footer-meta">hackathon prototype</span>
+</footer>
+
+<script>
+/* ============================================================
+   TracePulse NCR — Canvas Graph Engine
+   Ring-layout blast radius visualizer with animated traversal,
+   glow shaders via canvas gradients, edge particle flow.
+   Zero dependencies — hackathon-proof on any machine.
+   ============================================================ */
+
+/* rewrite the alpha component of an rgba() string */
+function rgba(glow, alpha) {
+  return glow.replace(/,[^,)]*\)$/, `,${alpha})`);
+}
+
+const NODE_STYLE = {
+  Batch:       { color: "#ef4444", glow: "rgba(239,68,68,.9)",  r: 26, shape: "octagon", icon: "☣" },
+  Warehouse:   { color: "#a78bfa", glow: "rgba(167,139,250,.8)", r: 19, shape: "box",    icon: "▤" },
+  Shipment:    { color: "#fb923c", glow: "rgba(251,146,60,.8)",  r: 15, shape: "diamond", icon: "➤" },
+  Kitchen:     { color: "#34d399", glow: "rgba(52,211,153,.8)",  r: 17, shape: "square",  icon: "⌂" },
+  Dish:        { color: "#fbbf24", glow: "rgba(251,191,36,.8)",  r: 15, shape: "circle",  icon: "◍" },
+  OrderCohort: { color: "#60a5fa", glow: "rgba(96,165,250,.8)",  r: 22, shape: "circle",  icon: "≡" },
+  Consumers:   { color: "#f472b6", glow: "rgba(244,114,182,.8)", r: 20, shape: "hex",     icon: "☺" },
+  Customer:    { color: "#f472b6", glow: "rgba(244,114,182,.7)", r: 11, shape: "circle",  icon: "☺" },
+};
+
+class GraphEngine {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.nodes = new Map();
+    this.edges = [];
+    this.particles = [];
+    this.running = false;
+    this.t0 = 0;
+    this.revealMs = 620;        // per-hop reveal spacing (slowed for storytelling)
+    this.hover = null;
+    this.onNodeClick = null;
+    this._resize = this.resize.bind(this);
+    window.addEventListener("resize", this._resize);
+    canvas.addEventListener("mousemove", (e) => this._onMove(e));
+    canvas.addEventListener("mouseleave", () => { this.hover = null; });
+    canvas.addEventListener("click", (e) => {
+      const n = this._pick(e);
+      if (n && this.onNodeClick) this.onNodeClick(n);
+    });
+    this.resize();
+  }
+
+  resize() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.w = Math.max(rect.width, 320);
+    this.h = Math.max(rect.height, 320);
+    this.canvas.width = this.w * dpr;
+    this.canvas.height = this.h * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  /* ---- layout: concentric rings by hop (deterministic, dagre-style DAG fan-out) ---- */
+  setGraph(nodes, edges) {
+    this.nodes = new Map();
+    this.edges = edges || [];
+    const rings = {};
+    (nodes || []).forEach((n) => {
+      const ring = n.ring ?? n.hop ?? 0;
+      (rings[ring] = rings[ring] || []).push(n);
+    });
+    const cx = this.w / 2, cy = this.h / 2 - 8;
+    const maxRing = Math.max(...Object.keys(rings).map(Number), 1);
+    const maxR = Math.min(this.w, this.h) / 2 - 74;
+    Object.entries(rings).forEach(([ring, list]) => {
+      const r = ring === "0" ? 0 : (ring / maxRing) * maxR;
+      const n = list.length;
+      list.forEach((node, i) => {
+        const angle = n === 1 ? -Math.PI / 2 : (i / n) * Math.PI * 2 - Math.PI / 2 + (ring % 2 ? Math.PI / n : 0);
+        const style = NODE_STYLE[node.label] || NODE_STYLE.Dish;
+        this.nodes.set(node.id, {
+          ...node, style,
+          x: cx + Math.cos(angle) * r,
+          y: cy + Math.sin(angle) * r * 0.92,
+          ring: Number(ring),
+          revealAt: Number(ring) * this.revealMs,
+          vx: 0, vy: 0,
+          angle: Math.random() * Math.PI * 2,
+        });
+      });
+    });
+    // mild physics relaxation so sibling nodes don't overlap labels
+    for (let k = 0; k < 60; k++) this._relax();
+    this.particles = this.edges
+      .filter((e) => ["SHIPPED_VIA", "DELIVERED_TO", "CONTAINS_ITEM", "PLACED_BY", "PREPARED"].includes(e.type))
+      .map((e) => ({ edge: e, t: Math.random(), speed: 0.004 + Math.random() * 0.004 }));
+  }
+
+  _relax() {
+    const arr = [...this.nodes.values()];
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        const a = arr[i], b = arr[j];
+        if (a.ring !== b.ring) continue;
+        let dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 1, min = 66;
+        if (d < min) {
+          const f = (min - d) / d * 0.35;
+          a.x -= dx * f; a.y -= dy * f; b.x += dx * f; b.y += dy * f;
+        }
+      }
+    }
+  }
+
+  start() {
+    this.t0 = performance.now();
+    if (!this.running) { this.running = true; requestAnimationFrame(() => this._loop()); }
+  }
+
+  elapsed() { return performance.now() - this.t0; }
+
+  markKitchenHold(id) {
+    const n = this.nodes.get(id);
+    if (n) n.hold = true;
+  }
+
+  markIntercepted() { this.intercepted = true; }
+
+  _loop() {
+    this._draw();
+    if (this.running) requestAnimationFrame(() => this._loop());
+  }
+
+  _edgePoint(e, t) {
+    const a = this.nodes.get(e.source), b = this.nodes.get(e.target);
+    if (!a || !b) return null;
+    // quadratic bow for visual separation
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const bow = Math.min(28, len * 0.14);
+    const cxp = mx - (dy / len) * bow, cyp = my + (dx / len) * bow;
+    const u = 1 - t;
+    return {
+      x: u * u * a.x + 2 * u * t * cxp + t * t * b.x,
+      y: u * u * a.y + 2 * u * t * cyp + t * t * b.y,
+      cx: cxp, cy: cyp, a, b,
+    };
+  }
+
+  _draw() {
+    const ctx = this.ctx, now = this.elapsed();
+    ctx.clearRect(0, 0, this.w, this.h);
+
+    // faint radar rings
+    ctx.save();
+    ctx.strokeStyle = "rgba(34,211,238,.05)";
+    const cx = this.w / 2, cy = this.h / 2 - 8;
+    for (let i = 1; i <= 5; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (Math.min(this.w, this.h) / 2 - 74) * (i / 5) * 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // edges
+    for (const e of this.edges) {
+      const a = this.nodes.get(e.source), b = this.nodes.get(e.target);
+      if (!a || !b) continue;
+      const appear = Math.max(a.revealAt, b.revealAt) + 260;
+      if (now < appear) continue;
+      const p = Math.min(1, (now - appear) / 500);
+      const pt = this._edgePoint(e, p);
+      if (!pt) continue;
+      const danger = e.type === "USES_BATCH" || a.label === "Batch";
+      const grad = ctx.createLinearGradient(a.x, a.y, pt.x, pt.y);
+      grad.addColorStop(0, danger ? "rgba(239,68,68,.75)" : "rgba(96,165,250,.5)");
+      grad.addColorStop(1, danger ? "rgba(251,191,36,.65)" : (b.style ? rgba(b.style.glow, 0.55) : "rgba(148,163,184,.5)"));
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = danger ? 2 : 1.4;
+      ctx.setLineDash(e.type === "USES_BATCH" ? [5, 5] : []);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // particles flowing downstream
+    for (const p of this.particles) {
+      const e = p.edge;
+      const a = this.nodes.get(e.source), b = this.nodes.get(e.target);
+      if (!a || !b) continue;
+      if (now < Math.max(a.revealAt, b.revealAt) + 800) continue;
+      p.t += p.speed;
+      if (p.t > 1) p.t = 0;
+      const pt = this._edgePoint(e, p.t);
+      if (!pt) continue;
+      ctx.fillStyle = "rgba(103,232,249,.9)";
+      ctx.shadowColor = "rgba(34,211,238,.9)";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // nodes
+    for (const n of this.nodes.values()) {
+      if (now < n.revealAt) continue;
+      const age = Math.min(1, (now - n.revealAt) / 420);
+      const scale = 0.4 + 0.6 * (1 - Math.pow(1 - age, 3));
+      this._drawNode(n, scale, now);
+    }
+  }
+
+  _drawNode(n, scale, now) {
+    const ctx = this.ctx;
+    const s = n.style;
+    const r = s.r * scale;
+    const isHover = this.hover === n.id;
+    const isRoot = n.label === "Batch";
+    ctx.save();
+    ctx.translate(n.x, n.y);
+
+    // contamination pulse for root batch
+    if (isRoot) {
+      const pulse = (now / 900) % 1;
+      ctx.strokeStyle = `rgba(239,68,68,${(1 - pulse) * 0.5})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 8 + pulse * 34, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // glow halo
+    const halo = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.6);
+    halo.addColorStop(0, rgba(s.glow, isHover ? 0.5 : 0.3));
+    halo.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body by shape
+    ctx.shadowColor = s.glow;
+    ctx.shadowBlur = isHover ? 26 : 14;
+    ctx.fillStyle = n.hold ? "#f59e0b" : s.color;
+    ctx.strokeStyle = "rgba(255,255,255,.75)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    const R = r;
+    switch (s.shape) {
+      case "octagon": this._poly(R, 8, Math.PI / 8); break;
+      case "diamond": this._poly(R, 4, 0); break;
+      case "square": this._rect(R * 1.7, R * 1.7, 4); break;
+      case "box": this._rect(R * 2.1, R * 1.5, 3); break;
+      case "hex": this._poly(R, 6, Math.PI / 6); break;
+      default: ctx.arc(0, 0, R, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // inner icon / count
+    ctx.fillStyle = "rgba(4,7,13,.9)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (n.label === "OrderCohort" || n.label === "Consumers") {
+      ctx.font = `700 ${Math.max(11, R * 0.62)}px 'JetBrains Mono',monospace`;
+      ctx.fillText(String(n.count ?? ""), 0, 1);
+    } else {
+      ctx.font = `${Math.max(10, R * 0.7)}px sans-serif`;
+      ctx.fillText(s.icon, 0, 1);
+    }
+    ctx.restore();
+
+    // label
+    ctx.save();
+    ctx.translate(n.x, n.y);
+    ctx.globalAlpha = scale;
+    ctx.textAlign = "center";
+    const label = n.name || n.id || "";
+    ctx.font = "600 10.5px 'Space Grotesk',sans-serif";
+    ctx.fillStyle = "rgba(230,241,255,.95)";
+    ctx.fillText(label.length > 26 ? label.slice(0, 24) + "…" : label, 0, r + 15);
+    let sub = null;
+    if (n.label === "Shipment") sub = `${n.avg_temp_c}°C transit${n.avg_temp_c > 8 ? " ⚠ BREACH" : ""}`;
+    if (n.label === "Kitchen") sub = n.hold ? "PARTIAL HOLD — paneer line frozen" : n.cluster;
+    if (n.label === "OrderCohort") sub = `${String(n.status).replace(/_/g, " ")}${this.intercepted && n.status === "OUT_FOR_DELIVERY" ? " → INTERCEPTED" : ""}`;
+    if (n.label === "Dish") sub = n.grams_per_dish ? `${n.grams_per_dish} g batch/dish` : null;
+    if (n.label === "Batch") sub = n.status;
+    if (sub) {
+      ctx.font = "500 8.5px 'JetBrains Mono',monospace";
+      ctx.fillStyle = n.avg_temp_c > 8 || n.hold ? "rgba(251,191,36,.95)" : "rgba(139,163,199,.9)";
+      ctx.fillText(sub, 0, r + 27);
+    }
+    ctx.restore();
+  }
+
+  _poly(r, sides, rot) {
+    const ctx = this.ctx;
+    for (let i = 0; i < sides; i++) {
+      const a = rot + (i / sides) * Math.PI * 2;
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+  _rect(w, h, rad) {
+    const ctx = this.ctx;
+    ctx.roundRect(-w / 2, -h / 2, w, h, rad);
+  }
+
+  _pick(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    for (const n of this.nodes.values()) {
+      if (Math.hypot(n.x - x, n.y - y) < n.style.r + 8) return n;
+    }
+    return null;
+  }
+  _onMove(e) {
+    const n = this._pick(e);
+    this.hover = n ? n.id : null;
+    this.canvas.style.cursor = n ? "pointer" : "default";
+  }
+}
+
+</script>
+<script>
+/* ============================================================
+   TracePulse NCR — Application Layer
+   Wires the REST contract to the mission-control UI.
+   Includes the one-click 4-minute judging demo sequencer.
+   ============================================================ */
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const INR = (v) => "₹" + Math.round(v).toLocaleString("en-IN");
+
+const state = {
+  summary: null, health: null,
+  batches: [], selectedBatch: "BATCH-PAN-1042",
+  incident: null,           // POST /incidents response
+  blast: null,              // GET blast-radius response
+  graphPayload: null,
+  zonesDone: {},
+  demoRunning: false, demoCancel: false,
+  tracedOrders: [],
+};
+
+let engine = null;
+
+/* ---------------- api helper ---------------- */
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    ...opts,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || res.statusText);
+  }
+  return res.json();
+}
+
+/* ---------------- toast ---------------- */
+function toast(msg, kind = "info", ttl = 5200) {
+  const el = document.createElement("div");
+  el.className = `toast ${kind}`;
+  el.innerHTML = msg;
+  $("#toast-stack").appendChild(el);
+  setTimeout(() => { el.classList.add("bye"); setTimeout(() => el.remove(), 450); }, ttl);
+}
+
+/* ---------------- count-up animation ---------------- */
+function countUp(el, target, { dur = 900, prefix = "", fmt = (v) => Math.round(v).toLocaleString("en-IN") } = {}) {
+  const t0 = performance.now();
+  const step = (t) => {
+    const p = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = prefix + fmt(target * eased);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ---------------- clock ---------------- */
+function tickClock() {
+  const d = new Date();
+  $("#clock-time").textContent = d.toLocaleTimeString("en-IN", { hour12: false });
+  $("#clock-date").textContent = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase() + " · DELHI NCR · IST";
+}
+setInterval(tickClock, 1000);
+
+/* ---------------- tabs ---------------- */
+$$(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+function switchTab(name) {
+  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+  $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
+  if (name === "blast" && engine) setTimeout(() => engine.resize(), 60);
+}
+
+/* ============================================================
+   INIT — load network summary + health
+   ============================================================ */
+async function init() {
+  tickClock();
+  engine = new GraphEngine($("#graph-canvas"));
+  try {
+    const [health, summary] = await Promise.all([
+      api("/api/v1/health"), api("/api/v1/network/summary"),
+    ]);
+    state.health = health; state.summary = summary;
+    renderDashboard();
+    renderBatchPicker();
+    renderOrderChips();
+    $("#hm-val").textContent = "● LIVE";
+    seedFeed();
+    pollEvents();
+  } catch (e) {
+    toast(`<b>API offline.</b> Start the FastAPI backend: <code>uvicorn app:app</code> — ${e.message}`, "err", 12000);
+    $("#hm-val").textContent = "DOWN"; $("#hm-val").classList.add("warn");
+  }
+}
+
+/* ---------------- dashboard ---------------- */
+function renderDashboard() {
+  const s = state.summary, h = state.health;
+  const kitchensActive = s.kitchens.filter((k) => k.status === "OPERATIONAL").length;
+  $("#kpi-net").textContent = s.incident ? "WARNING" : "SAFE";
+  $("#kpi-net-foot").textContent = s.incident ? `incident ${s.incident.id} live` : "99.8% batches clear";
+  $("#kpi-kitchens").textContent = `${kitchensActive}/${s.kitchens.length}`;
+  $("#kpi-batches").textContent = s.batches.length;
+  countUp($("#kpi-orders"), s.orders_total, { dur: 1100 });
+  $("#kpi-incidents").textContent = s.incident ? 1 : 0;
+  $("#kpi-incidents-foot").textContent = s.incident ? s.incident.id : "quarantine queue empty";
+
+  // cluster cards
+  const cc = $("#cluster-cards");
+  cc.innerHTML = "";
+  s.clusters.forEach((c) => {
+    const flaggedKitchens = s.kitchens.filter((k) => k.cluster === c.cluster && k.status !== "OPERATIONAL");
+    const badge = flaggedKitchens.length ? (flaggedKitchens.length > 1 ? "bad" : "warn") : "ok";
+    const badgeTxt = flaggedKitchens.length ? `${flaggedKitchens.length} FLAGGED` : "OPERATIONAL";
+    const kitchenChips = s.kitchens.filter((k) => k.cluster === c.cluster).map((k) =>
+      `<span class="cc-k ${k.status !== "OPERATIONAL" ? "flagged" : ""}">${k.id.replace("KIT-", "")}</span>`).join("");
+    cc.insertAdjacentHTML("beforeend", `
+      <div class="cluster-card">
+        <div class="cc-top"><span class="cc-name">${c.cluster.replace(/_/g, " ")}</span>
+        <span class="cc-badge ${badge}">${badgeTxt}</span></div>
+        <div class="cc-meta"><span>${c.kitchens} cloud kitchens</span><span>zone coverage · live KDS</span></div>
+        <div class="cc-kitchens">${kitchenChips}</div>
+      </div>`);
+  });
+
+  // upstream mesh
+  const mesh = $("#mesh-list");
+  mesh.innerHTML = "";
+  s.warehouses.forEach((w) => mesh.insertAdjacentHTML("beforeend", `
+    <div class="mesh-row">
+      <div class="mesh-ico" style="background:rgba(167,139,250,.14);color:#a78bfa">▤</div>
+      <div class="mesh-name">${w.name}<div class="mesh-sub">${w.id} · ${w.zone} · ${(w.capacity_sqft / 1000).toFixed(0)}k sqft cold storage</div></div>
+    </div>`));
+  s.batches.slice(0, 5).forEach((b) => {
+    const col = b.status === "CLEAR" ? "52,211,153" : "251,191,36";
+    mesh.insertAdjacentHTML("beforeend", `
+    <div class="mesh-row">
+      <div class="mesh-ico" style="background:rgba(${col},.13);color:rgb(${col})">☣</div>
+      <div class="mesh-name">${b.ingredient_name}<div class="mesh-sub">${b.id} · mfg ${b.mfg_date} · ${b.quantity_kg} kg · ${b.storage_temp_target_c}°C target</div></div>
+      <span class="bo-status ${b.status === "CLEAR" ? "c" : "s"}">${b.status}</span>
+    </div>`);
+  });
+
+  // telemetry
+  $("#telemetry").innerHTML = `
+    <div class="tele-tile"><div class="tele-k">GRAPH NODES</div><div class="tele-v c">${h.metrics.total_nodes.toLocaleString()}</div></div>
+    <div class="tele-tile"><div class="tele-k">RELATIONSHIPS</div><div class="tele-v c">${h.metrics.total_relationships.toLocaleString()}</div></div>
+    <div class="tele-tile"><div class="tele-k">API UPTIME</div><div class="tele-v g">${h.components.api.uptime_seconds}s</div></div>
+    <div class="tele-tile"><div class="tele-k">ENGINE MODE</div><div class="tele-v a" style="font-size:10.5px;padding-top:5px">INDEX-FREE ADJACENCY</div></div>`;
+}
+
+/* ---------------- feed ---------------- */
+function feedItem(sev, html, time) {
+  return `<div class="feed-item ${sev}"><span class="feed-time">${time}</span><div class="feed-body">${html}</div></div>`;
+}
+function seedFeed() {
+  const f = $("#incident-feed");
+  const rows = [
+    feedItem("ok", "<b>SH-212</b> delivered to Okhla Phase-2 · dock temp 5.9°C · within range", "09:00"),
+    feedItem("info", "<b>WH-KUN-01</b> intake verified — 5 batches, FSSAI licenses matched", "08:12"),
+    feedItem("ok", "Cold-chain telemetry nominal across 4 reefer vehicles", "07:40"),
+    feedItem("info", "Ingestion job complete — orders indexed via idempotent MERGE", "07:05"),
+  ];
+  f.innerHTML = rows.join("");
+}
+function pushFeed(sev, html) {
+  const time = new Date().toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  $("#incident-feed").insertAdjacentHTML("afterbegin", feedItem(sev, html, time));
+}
+async function pollEvents() {
+  try {
+    const { events } = await api("/api/v1/events");
+    const known = new Set(state._evts || []);
+    events.slice().reverse().forEach((e) => {
+      if (known.has(e.ts + e.code)) return;
+      known.add(e.ts + e.code);
+      const sev = e.code.includes("FLAG") ? "crit" : e.code.includes("CONTAINMENT") ? "warn" : "info";
+      pushFeed(sev, `<b>${e.code}</b> — ${e.detail}`);
+    });
+    state._evts = [...known];
+  } catch { /* non-fatal */ }
+  setTimeout(pollEvents, 6000);
+}
+
+/* ---------------- batch picker ---------------- */
+function renderBatchPicker() {
+  const wrap = $("#batch-picker");
+  wrap.innerHTML = "";
+  state.summary.batches.forEach((b) => {
+    const flagged = b.status !== "CLEAR";
+    const el = document.createElement("div");
+    el.className = `batch-opt ${b.id === state.selectedBatch ? "selected" : ""} ${flagged ? "" : "clean"}`;
+    el.dataset.id = b.id;
+    el.innerHTML = `
+      <span class="bo-dot ${b.status === "QUARANTINED" ? "flagged" : b.status === "SUSPECT" ? "suspect" : "clear"}"></span>
+      <div class="bo-main"><div class="bo-id">${b.id}</div><div class="bo-name">${b.ingredient_name} · ${b.quantity_kg} kg</div></div>
+      <span class="bo-status ${b.status === "CLEAR" ? "c" : b.status === "QUARANTINED" ? "q" : "s"}">${b.status}</span>`;
+    el.addEventListener("click", () => {
+      state.selectedBatch = b.id;
+      $$(".batch-opt").forEach((o) => o.classList.toggle("selected", o.dataset.id === b.id));
+    });
+    wrap.appendChild(el);
+  });
+}
+
+/* ============================================================
+   BLAST RADIUS
+   ============================================================ */
+$("#btn-blast").addEventListener("click", () => runBlast());
+
+async function runBlast(opts = {}) {
+  const batchId = opts.batchId || state.selectedBatch;
+  const batch = state.summary.batches.find((b) => b.id === batchId);
+  const btn = $("#btn-blast");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-icon">⟳</span> TRAVERSING GRAPH…';
+  switchTab("blast");
+
+  try {
+    // 1. flag incident for suspect batches (QA lab trigger)
+    if (batch && batch.status !== "CLEAR") {
+      state.incident = await api("/api/v1/incidents", {
+        method: "POST",
+        body: JSON.stringify({ batch_id: batchId, reason: "Listeria monocytogenes", severity: "CRITICAL", operator_id: "QA-OFFICER-07" }),
+      });
+      $("#incident-banner").hidden = false;
+      $("#ib-title").textContent = `FSSAI LAB ALERT — ${state.incident.incident_id}`;
+      $("#ib-sub").textContent = `${batch.ingredient_name} (${batchId}) positive: ${state.incident.severity_model.formula ? "Listeria monocytogenes" : "pathogen"} · severity ${state.incident.severity_model.class}`;
+      setNetAlert(true);
+      pushFeed("crit", `<b>${batchId}</b> flagged ${state.incident.severity_model.class} — Listeria monocytogenes (lab FSSAI/4471)`);
+    } else {
+      state.incident = null;
+      $("#incident-banner").hidden = true;
+      setNetAlert(false);
+    }
+
+    // 2. blast radius metrics
+    const blast = await api(`/api/v1/batches/${batchId}/blast-radius`);
+    state.blast = blast;
+
+    // 3. graph payload + animated reveal
+    const graph = await api(`/api/v1/batches/${batchId}/trace-graph?depth=5`);
+    state.graphPayload = graph;
+    $("#graph-empty").style.display = "none";
+    engine.setGraph(graph.nodes, graph.edges);
+    engine.resize();
+    engine.start();
+    $("#graph-tag").textContent = "TRAVERSING…";
+    $("#graph-tag").style.color = "var(--amber)";
+    setTimeout(() => { $("#graph-tag").textContent = `${graph.nodes.length} NODES · ${graph.edges.length} EDGES`; }, 3400);
+
+    renderBlastResults(blast, batch);
+    renderContainment();
+    if (!opts.silent) toast(`<b>Blast radius computed in ${blast.metrics.traversal_ms.toFixed(1)} ms.</b> ${blast.metrics.affected_orders} orders downstream of ${batchId}.`, blast.metrics.affected_orders ? "err" : "ok");
+  } catch (e) {
+    toast(`<b>Traversal failed:</b> ${e.message}`, "err");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="btn-icon">◎</span> INITIATE BLAST RADIUS ANALYSIS';
+  }
+}
+
+function setNetAlert(on) {
+  const chip = $("#net-chip");
+  chip.classList.toggle("alert", on);
+  $("#net-label").textContent = on ? "INCIDENT ACTIVE · INC-2026-003" : "NETWORK NOMINAL";
+}
+
+function renderBlastResults(blast, batch) {
+  const m = blast.metrics;
+
+  // latency
+  $("#latency-box").hidden = false;
+  countUp($("#lat-num"), m.traversal_ms, { dur: 800, fmt: (v) => v.toFixed(1) });
+  setTimeout(() => $("#lat-num").textContent = m.traversal_ms.toFixed(1) + " ms", 850);
+  $("#lat-hops").textContent = `${m.hops} hops · ${m.affected_kitchens} kitchens · ${m.affected_orders} orders`;
+  requestAnimationFrame(() => { $("#lat-fill").style.width = Math.max(2.5, Math.min(100, (m.traversal_ms / 200) * 100)) + "%"; });
+
+  // KPIs
+  $("#blast-kpis").hidden = false;
+  countUp($("#bk-orders"), m.affected_orders, { dur: 1200 });
+  countUp($("#bk-kitchens"), m.affected_kitchens, { dur: 1000 });
+  countUp($("#bk-customers"), m.exposed_customers, { dur: 1300 });
+  countUp($("#bk-gmv"), m.gmv_at_risk_inr, { dur: 1400, fmt: (v) => INR(v) });
+
+  // status distribution
+  const sc = blast.status_counts;
+  const total = Math.max(1, sc.PREPARING + sc.OUT_FOR_DELIVERY + sc.DELIVERED + (sc.INTERCEPTED || 0));
+  $("#status-dist").hidden = false;
+  $("#seg-prep").style.width = (sc.PREPARING / total) * 100 + "%";
+  $("#seg-transit").style.width = (sc.OUT_FOR_DELIVERY / total) * 100 + "%";
+  $("#seg-deliv").style.width = ((sc.DELIVERED + (sc.INTERCEPTED || 0)) / total) * 100 + "%";
+  $("#sd-legend").innerHTML = `
+    <span class="sd-l"><i style="background:#fbbf24"></i>PREPARING ${sc.PREPARING}</span>
+    <span class="sd-l"><i style="background:#fb923c"></i>IN TRANSIT ${sc.OUT_FOR_DELIVERY}</span>
+    <span class="sd-l"><i style="background:#ef4444"></i>DELIVERED ${sc.DELIVERED}</span>`;
+
+  // cold-chain breach note
+  const bn = $("#breach-note");
+  if (blast.temp_breach) {
+    bn.hidden = false;
+    bn.innerHTML = `<b>⚠ COLD-CHAIN BREACH CORRELATED:</b> Shipment <b>${blast.breach_shipment}</b> recorded <b>9.4°C</b> (limit 8°C).
+      Co-stored batches <b>BATCH-CRM-1150</b> (Malai Cream) and <b>BATCH-BUT-1204</b> (White Butter) auto-marked <b>SUSPECT</b>.
+      Severity multiplier ×1.5 applied.`;
+  } else {
+    bn.hidden = true;
+  }
+
+  // ledger
+  if (blast.orders && blast.orders.length) {
+    $("#affected-table-wrap").hidden = false;
+    $("#ledger-count").textContent = `${m.affected_orders} ORDERS · showing ${blast.orders_returned}`;
+    const tb = $("#ledger-table tbody");
+    tb.innerHTML = blast.orders.slice(0, 40).map((o) => `
+      <tr>
+        <td>${o.order_id}</td>
+        <td>${o.dish}</td>
+        <td>${o.kitchen || "—"}</td>
+        <td><span class="st ${o.status}">${o.status.replace(/_/g, " ")}</span></td>
+        <td>${INR(o.total_inr)}</td>
+      </tr>`).join("");
+  } else {
+    $("#affected-table-wrap").hidden = true;
+  }
+}
+
+/* ============================================================
+   CONTAINMENT
+   ============================================================ */
+function renderContainment() {
+  const zonesEl = $("#zones");
+  if (!state.incident) {
+    zonesEl.innerHTML = `<div class="panel" style="grid-column:1/-1;text-align:center;color:var(--ink-faint);padding:34px">
+      Flag a suspect batch and run blast radius to generate the containment boundary.</div>`;
+    $("#sev-score").textContent = "—";
+    $("#sev-class").textContent = "Run blast radius first";
+    $("#sev-formula").textContent = "";
+    return;
+  }
+  const sev = state.incident.severity_model;
+  $("#sev-score").textContent = sev.score;
+  $("#sev-score").style.color = sev.class === "CRITICAL" ? "var(--red-soft)" : sev.class === "HIGH" ? "var(--orange)" : "var(--amber)";
+  $("#sev-class").textContent = `CLASSIFICATION: ${sev.class}`;
+  $("#sev-formula").innerHTML =
+    `S<sub>bio</sub> × (O<sub>prep</sub>×2.0 + O<sub>transit</sub>×3.0 + O<sub>deliv</sub>×1.5) × C<sub>temp</sub><br>= ${sev.formula} = <b style="color:var(--ink)">${sev.score}</b>`;
+
+  const sc = state.incident.status_counts;
+  const meta = [
+    { key: "ZONE1_FREEZE_PREP", cls: "z1", icon: "⏻", count: sc.PREPARING, unit: "ORDERS IN PREP", btn: "EXECUTE KDS LOCK", action: "FREEZE_PREP" },
+    { key: "ZONE2_INTERCEPT_DISPATCH", cls: "z2", icon: "⛔", count: sc.OUT_FOR_DELIVERY, unit: "RIDERS IN TRANSIT", btn: "DISPATCH RIDER HALT", action: "INTERCEPT_DISPATCH" },
+    { key: "ZONE3_NOTIFY_CONSUMER", cls: "z3", icon: "📡", count: sc.DELIVERED, unit: "CONSUMERS ALERTED", btn: "TRIGGER SMS WEBHOOK", action: "NOTIFY_CONSUMER" },
+  ];
+  zonesEl.innerHTML = "";
+  meta.forEach((z) => {
+    const boundary = state.incident.containment_boundary.find((b) => b.zone === z.key);
+    const done = state.zonesDone[z.action];
+    zonesEl.insertAdjacentHTML("beforeend", `
+      <div class="zone ${z.cls}">
+        <div class="zone-top">
+          <div><div class="zone-num">${z.key.split("_")[0]} · ${z.action.replaceAll("_", " ")}</div>
+          <div class="zone-title">${z.icon} ${boundary ? boundary.title : ""}</div></div>
+          <div class="zone-count"><div class="zc-num" data-count="${z.count}">0</div><div class="zc-l">${z.unit}</div></div>
+        </div>
+        <div class="zone-desc">${boundary ? boundary.desc : ""}</div>
+        <div class="zone-directive">${boundary ? boundary.directive : ""}</div>
+        <button class="btn-zone ${done ? "done" : ""}" data-action="${z.action}" ${done ? "disabled" : ""}>${done ? "✓ EXECUTED" : z.btn}</button>
+        <div class="zone-status ${done ? "ok" : ""}" id="zstat-${z.action}">${done ? "directive confirmed" : ""}</div>
+      </div>`);
+    countUp(zonesEl.querySelector(`[data-count="${z.count}"]`), z.count, { dur: 900 });
+  });
+  $$(".btn-zone").forEach((b) => b.addEventListener("click", () => executeZone(b.dataset.action)));
+}
+
+async function executeZone(action, opts = {}) {
+  if (!state.incident) return toast("Run blast radius first.", "err");
+  if (state.zonesDone[action]) return;
+  const btn = $(`.btn-zone[data-action="${action}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "DISPATCHING…"; }
+  try {
+    const zone = state.incident.containment_boundary.find((b) => b.zone.startsWith(action === "FREEZE_PREP" ? "ZONE1" : action === "INTERCEPT_DISPATCH" ? "ZONE2" : "ZONE3"));
+    const res = await api(`/api/v1/incidents/${state.incident.incident_id}/quarantine`, {
+      method: "POST",
+      body: JSON.stringify({ action, target_kitchen_ids: zone && zone.scope ? zone.scope.kitchens || [] : [] }),
+    });
+    state.zonesDone[action] = res;
+
+    if (action === "FREEZE_PREP") {
+      (res.locked_kitchens || []).forEach((id) => engine.markKitchenHold(id));
+      renderDashboard();
+      toast(`<b>KDS locks dispatched to ${res.locked_kitchens.length} kitchens.</b> ${res.note}`, "ok");
+      pushFeed("warn", `<b>FREEZE_PREP</b> — paneer SKU lines locked at ${res.locked_kitchens.length} kitchens; biryani/dal/breads remain LIVE`);
+      setZoneDone(action, `${res.locked_kitchens.length} stations locked · safe lines unaffected`);
+    } else if (action === "INTERCEPT_DISPATCH") {
+      engine.markIntercepted();
+      toast(`<b>${res.orders_intercepted} riders intercepted.</b> Orders flipped to INTERCEPTED before handover.`, "ok");
+      pushFeed("warn", `<b>INTERCEPT_DISPATCH</b> — ${res.orders_intercepted} orders recalled from transit`);
+      setZoneDone(action, `${res.orders_intercepted} orders flipped to INTERCEPTED`);
+    } else {
+      toast(`<b>${res.notifications_queued} consumer alerts queued.</b> “${res.message}”`, "info");
+      pushFeed("crit", `<b>NOTIFY_CONSUMER</b> — ${res.notifications_queued} safety SMS via phone_hash webhook`);
+      setZoneDone(action, `${res.notifications_queued} alerts queued via webhook`);
+    }
+    renderDashboardKPIOnly();
+  } catch (e) {
+    toast(`<b>Action failed:</b> ${e.message}`, "err");
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+function setZoneDone(action, msg) {
+  const btn = $(`.btn-zone[data-action="${action}"]`);
+  if (btn) { btn.classList.add("done"); btn.textContent = "✓ EXECUTED"; }
+  const st = $(`#zstat-${action}`);
+  if (st) { st.textContent = msg; st.classList.add("ok"); }
+}
+
+function renderDashboardKPIOnly() {
+  if (state.summary) {
+    // refresh kitchen statuses lazily via summary re-fetch
+    api("/api/v1/network/summary").then((s) => { state.summary = s; renderDashboard(); }).catch(() => {});
+  }
+}
+
+function appendContainmentLog(code, msg) {
+  const log = $("#containment-log");
+  if (log.querySelector(".log-empty")) log.innerHTML = "";
+  const time = new Date().toLocaleTimeString("en-IN", { hour12: false });
+  log.insertAdjacentHTML("afterbegin", `
+    <div class="log-item"><span class="log-time">${time}</span><span class="log-code">${code}</span><span class="log-msg">${msg}</span></div>`);
+}
+
+/* ============================================================
+   REVERSE TRACE
+   ============================================================ */
+const ENT_META = {
+  Order: { icon: "🧾", color: "96,165,250", name: (n) => n.id },
+  Dish: { icon: "◍", color: "251,191,36", name: (n) => n.name },
+  Kitchen: { icon: "⌂", color: "52,211,153", name: (n) => n.name },
+  Shipment: { icon: "➤", color: "251,146,60", name: (n) => `${n.id} · ${n.vehicle_plate}` },
+  Warehouse: { icon: "▤", color: "167,139,250", name: (n) => n.name },
+  Batch: { icon: "☣", color: "239,68,68", name: (n) => `${n.id} — ${n.ingredient_name}` },
+  Supplier: { icon: "⬢", color: "34,211,238", name: (n) => n.name },
+};
+
+function renderOrderChips() {
+  const chips = [
+    { id: "ORD-8600", note: "paneer · prep" },
+    { id: "ORD-8660", note: "paneer · transit" },
+    { id: "ORD-8900", note: "paneer · delivered" },
+    { id: "ORD-9305", note: "biryani · clean" },
+  ];
+  $("#order-chips").innerHTML = chips.map((c) =>
+    `<span class="order-chip" data-id="${c.id}">${c.id} <span style="opacity:.55">· ${c.note}</span></span>`).join("");
+  $$(".order-chip").forEach((c) => c.addEventListener("click", () => {
+    $("#order-input").value = c.dataset.id;
+    runReverse(c.dataset.id);
+  }));
+}
+
+$("#btn-reverse").addEventListener("click", () => runReverse());
+$("#order-input").addEventListener("keydown", (e) => { if (e.key === "Enter") runReverse(); });
+
+async function runReverse(orderId, opts = {}) {
+  const id = orderId || $("#order-input").value.trim();
+  if (!id) return toast("Enter an order ID.", "err");
+  switchTab("reverse");
+  const btn = $("#btn-reverse");
+  btn.disabled = true; btn.innerHTML = '<span class="btn-icon">⟳</span> TRACING…';
+  const track = $("#path-track");
+  track.innerHTML = "";
+  $("#rev-verdict").hidden = true;
+  $("#rev-latency").hidden = true;
+  $("#rev-tag").textContent = "TRAVERSING UPSTREAM…";
+
+  try {
+    const res = await api(`/api/v1/orders/${id}/reverse-trace`);
+    state.tracedOrders.push(res);
+
+    // animated hop-by-hop reveal
+    res.hops.forEach((hop, i) => {
+      const meta = ENT_META[hop.entity] || { icon: "•", color: "148,163,184", name: (n) => n.id };
+      const flagged = hop.entity === "Batch" && hop.status !== "CLEAR";
+      const metaLines = [];
+      if (hop.entity === "Order") metaLines.push(`status ${hop.status} · ${INR(hop.total_inr)} · ${hop.ordered_at.slice(11, 16)} UTC`);
+      if (hop.entity === "Dish") metaLines.push(`${hop.category} · shelf life ${hop.shelf_life_hours}h`);
+      if (hop.entity === "Kitchen") metaLines.push(`${hop.cluster} cluster · ${hop.status}`);
+      if (hop.entity === "Shipment") metaLines.push(`reefer ${hop.vehicle_plate} · avg ${hop.avg_temp_c}°C${hop.avg_temp_c > 8 ? " ⚠ BREACH" : ""}`);
+      if (hop.entity === "Warehouse") metaLines.push(`${hop.zone} · ${hop.capacity_sqft.toLocaleString()} sqft`);
+      if (hop.entity === "Batch") metaLines.push(`mfg ${hop.mfg_date} · exp ${hop.expiry_date} · ${hop.quantity_kg} kg · ${hop.status}`);
+      if (hop.entity === "Supplier") metaLines.push(`${hop.location} · FSSAI ${hop.fssai_license}`);
+      if (i > 0) track.insertAdjacentHTML("beforeend", `<div class="path-connector"></div>`);
+      track.insertAdjacentHTML("beforeend", `
+        <div class="path-node ${flagged ? "flagged" : ""}" id="pn-${i}">
+          <div class="pn-ico" style="background:rgba(${meta.color},.13);color:rgb(${meta.color})">${meta.icon}</div>
+          <div class="pn-body">
+            <div class="pn-ent">${hop.entity.toUpperCase()} · HOP ${i}</div>
+            <div class="pn-name">${meta.name(hop)}</div>
+            <div class="pn-meta">${metaLines.join("<br>")}</div>
+          </div>
+          <div class="pn-hop">${i === res.hops_count - 1 ? "◉ ROOT" : ""}</div>
+        </div>`);
+      setTimeout(() => $(`#pn-${i}`).classList.add("shown"), 260 * (i + 1));
+    });
+
+    setTimeout(() => {
+      $("#rev-latency").hidden = false;
+      $("#rl-num").textContent = res.traversal_ms.toFixed(1) + " ms";
+      $("#rl-hops").textContent = `${res.hops_count} hops · customer → supplier`;
+      const v = res.verdict;
+      const el = $("#rev-verdict");
+      el.hidden = false;
+      if (v.contaminated) {
+        el.className = "rev-verdict bad";
+        el.innerHTML = `<b>⚠ ROOT CAUSE ISOLATED:</b> ${v.root_cause_batch} from <b>${v.root_cause_supplier}</b>.
+          Incident <b>${v.incident ? v.incident.id : ""}</b> already active — containment boundary in effect.
+          FSSAI §28 chain-of-custody export ready.`;
+        $("#rev-tag").textContent = "ROOT CAUSE FOUND";
+        $("#rev-tag").style.color = "var(--red-soft)";
+        if (!opts.silent) toast(`<b>Root cause found in ${res.traversal_ms.toFixed(1)} ms:</b> ${v.root_cause_batch} ← ${v.root_cause_supplier}`, "err");
+      } else {
+        el.className = "rev-verdict good";
+        el.innerHTML = `<b>✓ PATH CLEAN:</b> no active incident on any upstream batch for this order.
+          Chicken batch provenance verified to <b>${v.root_cause_supplier}</b>.`;
+        $("#rev-tag").textContent = "PATH CLEAN";
+        $("#rev-tag").style.color = "var(--green)";
+        if (!opts.silent) toast(`<b>Order ${id} verified clean</b> in ${res.traversal_ms.toFixed(1)} ms.`, "ok");
+      }
+    }, 260 * (res.hops_count + 1));
+  } catch (e) {
+    toast(`<b>Reverse trace failed:</b> ${e.message}`, "err");
+    $("#rev-tag").textContent = "ERROR";
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="btn-icon">⇄</span> TRACE';
+  }
+}
+
+/* ============================================================
+   ONE-CLICK 4-MINUTE JUDGING DEMO
+   ============================================================ */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function checkCancel() { if (state.demoCancel) throw new Error("DEMO_CANCELLED"); }
+
+async function runDemo() {
+  if (state.demoRunning) { state.demoCancel = true; return; }
+  state.demoRunning = true; state.demoCancel = false;
+  const fab = $("#btn-autodemo");
+  fab.innerHTML = "■ STOP DEMO";
+  fab.classList.add("running");
+  try {
+    // Act 1 — nominal network
+    switchTab("dashboard");
+    toast("<b>Act 1 — Saturday 14:00, peak lunch.</b> 750k meals/day flow through Delhi NCR cloud kitchens. Network nominal.", "info", 4200);
+    await sleep(3800); await checkCancel();
+
+    // Act 2 — the incident
+    pushFeed("crit", "<b>FSSAI LAB ALERT</b> — Batch BATCH-PAN-1042 (Malai Paneer) tests POSITIVE for Listeria monocytogenes");
+    toast("<b>⚠ FSSAI LAB ALERT:</b> Batch B-1042 Malai Paneer positive for <b>Listeria monocytogenes</b>. Initiating quarantine protocol.", "err", 5000);
+    setNetAlert(true);
+    await sleep(3200); await checkCancel();
+
+    // Act 3 — blast radius
+    state.selectedBatch = "BATCH-PAN-1042";
+    renderBatchPicker();
+    await runBlast({ batchId: "BATCH-PAN-1042", silent: true });
+    toast("<b>Blast radius complete.</b> 6 kitchens · 342 orders · 489 consumers · ₹1,24,000 GMV at risk — in milliseconds, not hours.", "err", 6000);
+    await sleep(6200); await checkCancel();
+
+    // Act 4 — surgical containment
+    switchTab("containment");
+    await sleep(2400); await checkCancel();
+    await executeZone("FREEZE_PREP", { silent: true }); await sleep(1900); await checkCancel();
+    await executeZone("INTERCEPT_DISPATCH", { silent: true }); await sleep(1900); await checkCancel();
+    await executeZone("NOTIFY_CONSUMER", { silent: true }); await sleep(2400); await checkCancel();
+
+    // Act 5 — reverse trace
+    switchTab("reverse");
+    $("#order-input").value = "ORD-8660";
+    await runReverse("ORD-8660", { silent: true });
+    await sleep(4600); await checkCancel();
+
+    toast("<b>✓ DEMO COMPLETE.</b> Hours of relational-database panic → milliseconds of surgical, graph-native containment. Index-free adjacency wins.", "ok", 9000);
+  } catch (e) {
+    if (e.message !== "DEMO_CANCELLED") console.error(e);
+  } finally {
+    state.demoRunning = false; state.demoCancel = false;
+    fab.innerHTML = "▶ AUTO-RUN 4-MIN DEMO";
+    fab.classList.remove("running");
+  }
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#btn-autodemo")) runDemo();
+});
+
+/* ---------------- boot ---------------- */
+init();
+
+</script>
+</body>
+</html>

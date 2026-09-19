@@ -1,0 +1,47 @@
+# TracePulse NCR — Render infrastructure blueprint (PART 14 updated for Next.js + FastAPI)
+services:
+  # ---- FastAPI backend (graph engine + AI copilot) ----
+  - type: web
+    name: tracepulse-api
+    runtime: python
+    region: singapore          # closest to Delhi NCR
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      # --- AI Copilot (optional but recommended) ---
+      # Works with OpenAI, Groq, or OpenRouter. Leave unset for deterministic fallback mode.
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_BASE_URL
+        value: https://api.groq.com/openai/v1   # fast free tier; or https://api.openai.com/v1
+      - key: AI_MODEL
+        value: llama-3.1-70b-versatile          # or gpt-4o-mini
+      # --- Neo4j swap-in (hour 0-1) ---
+      - key: NEO4J_URI
+        sync: false            # bolt+s://<instance>.databases.neo4j.io
+      - key: NEO4J_USER
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        sync: false
+
+  # ---- Next.js frontend ----
+  - type: web
+    name: tracepulse-web
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: web
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: API_BASE_URL
+        value: https://tracepulse-api.onrender.com
+      - key: NODE_VERSION
+        value: 20.18.0

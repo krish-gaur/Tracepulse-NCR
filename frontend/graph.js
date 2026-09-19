@@ -1,0 +1,322 @@
+/* ============================================================
+   TracePulse NCR — Canvas Graph Engine
+   Ring-layout blast radius visualizer with animated traversal,
+   glow shaders via canvas gradients, edge particle flow.
+   Zero dependencies — hackathon-proof on any machine.
+   ============================================================ */
+
+/* rewrite the alpha component of an rgba() string */
+function rgba(glow, alpha) {
+  return glow.replace(/,[^,)]*\)$/, `,${alpha})`);
+}
+
+const NODE_STYLE = {
+  Batch:       { color: "#ef4444", glow: "rgba(239,68,68,.9)",  r: 26, shape: "octagon", icon: "☣" },
+  Warehouse:   { color: "#a78bfa", glow: "rgba(167,139,250,.8)", r: 19, shape: "box",    icon: "▤" },
+  Shipment:    { color: "#fb923c", glow: "rgba(251,146,60,.8)",  r: 15, shape: "diamond", icon: "➤" },
+  Kitchen:     { color: "#34d399", glow: "rgba(52,211,153,.8)",  r: 17, shape: "square",  icon: "⌂" },
+  Dish:        { color: "#fbbf24", glow: "rgba(251,191,36,.8)",  r: 15, shape: "circle",  icon: "◍" },
+  OrderCohort: { color: "#60a5fa", glow: "rgba(96,165,250,.8)",  r: 22, shape: "circle",  icon: "≡" },
+  Consumers:   { color: "#f472b6", glow: "rgba(244,114,182,.8)", r: 20, shape: "hex",     icon: "☺" },
+  Customer:    { color: "#f472b6", glow: "rgba(244,114,182,.7)", r: 11, shape: "circle",  icon: "☺" },
+};
+
+class GraphEngine {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.nodes = new Map();
+    this.edges = [];
+    this.particles = [];
+    this.running = false;
+    this.t0 = 0;
+    this.revealMs = 620;        // per-hop reveal spacing (slowed for storytelling)
+    this.hover = null;
+    this.onNodeClick = null;
+    this._resize = this.resize.bind(this);
+    window.addEventListener("resize", this._resize);
+    canvas.addEventListener("mousemove", (e) => this._onMove(e));
+    canvas.addEventListener("mouseleave", () => { this.hover = null; });
+    canvas.addEventListener("click", (e) => {
+      const n = this._pick(e);
+      if (n && this.onNodeClick) this.onNodeClick(n);
+    });
+    this.resize();
+  }
+
+  resize() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.w = Math.max(rect.width, 320);
+    this.h = Math.max(rect.height, 320);
+    this.canvas.width = this.w * dpr;
+    this.canvas.height = this.h * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  /* ---- layout: concentric rings by hop (deterministic, dagre-style DAG fan-out) ---- */
+  setGraph(nodes, edges) {
+    this.nodes = new Map();
+    this.edges = edges || [];
+    const rings = {};
+    (nodes || []).forEach((n) => {
+      const ring = n.ring ?? n.hop ?? 0;
+      (rings[ring] = rings[ring] || []).push(n);
+    });
+    const cx = this.w / 2, cy = this.h / 2 - 8;
+    const maxRing = Math.max(...Object.keys(rings).map(Number), 1);
+    const maxR = Math.min(this.w, this.h) / 2 - 74;
+    Object.entries(rings).forEach(([ring, list]) => {
+      const r = ring === "0" ? 0 : (ring / maxRing) * maxR;
+      const n = list.length;
+      list.forEach((node, i) => {
+        const angle = n === 1 ? -Math.PI / 2 : (i / n) * Math.PI * 2 - Math.PI / 2 + (ring % 2 ? Math.PI / n : 0);
+        const style = NODE_STYLE[node.label] || NODE_STYLE.Dish;
+        this.nodes.set(node.id, {
+          ...node, style,
+          x: cx + Math.cos(angle) * r,
+          y: cy + Math.sin(angle) * r * 0.92,
+          ring: Number(ring),
+          revealAt: Number(ring) * this.revealMs,
+          vx: 0, vy: 0,
+          angle: Math.random() * Math.PI * 2,
+        });
+      });
+    });
+    // mild physics relaxation so sibling nodes don't overlap labels
+    for (let k = 0; k < 60; k++) this._relax();
+    this.particles = this.edges
+      .filter((e) => ["SHIPPED_VIA", "DELIVERED_TO", "CONTAINS_ITEM", "PLACED_BY", "PREPARED"].includes(e.type))
+      .map((e) => ({ edge: e, t: Math.random(), speed: 0.004 + Math.random() * 0.004 }));
+  }
+
+  _relax() {
+    const arr = [...this.nodes.values()];
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        const a = arr[i], b = arr[j];
+        if (a.ring !== b.ring) continue;
+        let dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 1, min = 66;
+        if (d < min) {
+          const f = (min - d) / d * 0.35;
+          a.x -= dx * f; a.y -= dy * f; b.x += dx * f; b.y += dy * f;
+        }
+      }
+    }
+  }
+
+  start() {
+    this.t0 = performance.now();
+    if (!this.running) { this.running = true; requestAnimationFrame(() => this._loop()); }
+  }
+
+  elapsed() { return performance.now() - this.t0; }
+
+  markKitchenHold(id) {
+    const n = this.nodes.get(id);
+    if (n) n.hold = true;
+  }
+
+  markIntercepted() { this.intercepted = true; }
+
+  _loop() {
+    this._draw();
+    if (this.running) requestAnimationFrame(() => this._loop());
+  }
+
+  _edgePoint(e, t) {
+    const a = this.nodes.get(e.source), b = this.nodes.get(e.target);
+    if (!a || !b) return null;
+    // quadratic bow for visual separation
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const bow = Math.min(28, len * 0.14);
+    const cxp = mx - (dy / len) * bow, cyp = my + (dx / len) * bow;
+    const u = 1 - t;
+    return {
+      x: u * u * a.x + 2 * u * t * cxp + t * t * b.x,
+      y: u * u * a.y + 2 * u * t * cyp + t * t * b.y,
+      cx: cxp, cy: cyp, a, b,
+    };
+  }
+
+  _draw() {
+    const ctx = this.ctx, now = this.elapsed();
+    ctx.clearRect(0, 0, this.w, this.h);
+
+    // faint radar rings
+    ctx.save();
+    ctx.strokeStyle = "rgba(34,211,238,.05)";
+    const cx = this.w / 2, cy = this.h / 2 - 8;
+    for (let i = 1; i <= 5; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (Math.min(this.w, this.h) / 2 - 74) * (i / 5) * 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // edges
+    for (const e of this.edges) {
+      const a = this.nodes.get(e.source), b = this.nodes.get(e.target);
+      if (!a || !b) continue;
+      const appear = Math.max(a.revealAt, b.revealAt) + 260;
+      if (now < appear) continue;
+      const p = Math.min(1, (now - appear) / 500);
+      const pt = this._edgePoint(e, p);
+      if (!pt) continue;
+      const danger = e.type === "USES_BATCH" || a.label === "Batch";
+      const grad = ctx.createLinearGradient(a.x, a.y, pt.x, pt.y);
+      grad.addColorStop(0, danger ? "rgba(239,68,68,.75)" : "rgba(96,165,250,.5)");
+      grad.addColorStop(1, danger ? "rgba(251,191,36,.65)" : (b.style ? rgba(b.style.glow, 0.55) : "rgba(148,163,184,.5)"));
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = danger ? 2 : 1.4;
+      ctx.setLineDash(e.type === "USES_BATCH" ? [5, 5] : []);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // particles flowing downstream
+    for (const p of this.particles) {
+      const e = p.edge;
+      const a = this.nodes.get(e.source), b = this.nodes.get(e.target);
+      if (!a || !b) continue;
+      if (now < Math.max(a.revealAt, b.revealAt) + 800) continue;
+      p.t += p.speed;
+      if (p.t > 1) p.t = 0;
+      const pt = this._edgePoint(e, p.t);
+      if (!pt) continue;
+      ctx.fillStyle = "rgba(103,232,249,.9)";
+      ctx.shadowColor = "rgba(34,211,238,.9)";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // nodes
+    for (const n of this.nodes.values()) {
+      if (now < n.revealAt) continue;
+      const age = Math.min(1, (now - n.revealAt) / 420);
+      const scale = 0.4 + 0.6 * (1 - Math.pow(1 - age, 3));
+      this._drawNode(n, scale, now);
+    }
+  }
+
+  _drawNode(n, scale, now) {
+    const ctx = this.ctx;
+    const s = n.style;
+    const r = s.r * scale;
+    const isHover = this.hover === n.id;
+    const isRoot = n.label === "Batch";
+    ctx.save();
+    ctx.translate(n.x, n.y);
+
+    // contamination pulse for root batch
+    if (isRoot) {
+      const pulse = (now / 900) % 1;
+      ctx.strokeStyle = `rgba(239,68,68,${(1 - pulse) * 0.5})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 8 + pulse * 34, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // glow halo
+    const halo = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.6);
+    halo.addColorStop(0, rgba(s.glow, isHover ? 0.5 : 0.3));
+    halo.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body by shape
+    ctx.shadowColor = s.glow;
+    ctx.shadowBlur = isHover ? 26 : 14;
+    ctx.fillStyle = n.hold ? "#f59e0b" : s.color;
+    ctx.strokeStyle = "rgba(255,255,255,.75)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    const R = r;
+    switch (s.shape) {
+      case "octagon": this._poly(R, 8, Math.PI / 8); break;
+      case "diamond": this._poly(R, 4, 0); break;
+      case "square": this._rect(R * 1.7, R * 1.7, 4); break;
+      case "box": this._rect(R * 2.1, R * 1.5, 3); break;
+      case "hex": this._poly(R, 6, Math.PI / 6); break;
+      default: ctx.arc(0, 0, R, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // inner icon / count
+    ctx.fillStyle = "rgba(4,7,13,.9)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (n.label === "OrderCohort" || n.label === "Consumers") {
+      ctx.font = `700 ${Math.max(11, R * 0.62)}px 'JetBrains Mono',monospace`;
+      ctx.fillText(String(n.count ?? ""), 0, 1);
+    } else {
+      ctx.font = `${Math.max(10, R * 0.7)}px sans-serif`;
+      ctx.fillText(s.icon, 0, 1);
+    }
+    ctx.restore();
+
+    // label
+    ctx.save();
+    ctx.translate(n.x, n.y);
+    ctx.globalAlpha = scale;
+    ctx.textAlign = "center";
+    const label = n.name || n.id || "";
+    ctx.font = "600 10.5px 'Space Grotesk',sans-serif";
+    ctx.fillStyle = "rgba(230,241,255,.95)";
+    ctx.fillText(label.length > 26 ? label.slice(0, 24) + "…" : label, 0, r + 15);
+    let sub = null;
+    if (n.label === "Shipment") sub = `${n.avg_temp_c}°C transit${n.avg_temp_c > 8 ? " ⚠ BREACH" : ""}`;
+    if (n.label === "Kitchen") sub = n.hold ? "PARTIAL HOLD — paneer line frozen" : n.cluster;
+    if (n.label === "OrderCohort") sub = `${String(n.status).replace(/_/g, " ")}${this.intercepted && n.status === "OUT_FOR_DELIVERY" ? " → INTERCEPTED" : ""}`;
+    if (n.label === "Dish") sub = n.grams_per_dish ? `${n.grams_per_dish} g batch/dish` : null;
+    if (n.label === "Batch") sub = n.status;
+    if (sub) {
+      ctx.font = "500 8.5px 'JetBrains Mono',monospace";
+      ctx.fillStyle = n.avg_temp_c > 8 || n.hold ? "rgba(251,191,36,.95)" : "rgba(139,163,199,.9)";
+      ctx.fillText(sub, 0, r + 27);
+    }
+    ctx.restore();
+  }
+
+  _poly(r, sides, rot) {
+    const ctx = this.ctx;
+    for (let i = 0; i < sides; i++) {
+      const a = rot + (i / sides) * Math.PI * 2;
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+  _rect(w, h, rad) {
+    const ctx = this.ctx;
+    ctx.roundRect(-w / 2, -h / 2, w, h, rad);
+  }
+
+  _pick(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    for (const n of this.nodes.values()) {
+      if (Math.hypot(n.x - x, n.y - y) < n.style.r + 8) return n;
+    }
+    return null;
+  }
+  _onMove(e) {
+    const n = this._pick(e);
+    this.hover = n ? n.id : null;
+    this.canvas.style.cursor = n ? "pointer" : "default";
+  }
+}

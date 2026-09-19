@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>TracePulse NCR — Contamination Quarantine Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="bgfx">
+  <div class="grid-overlay"></div>
+  <div class="scanline"></div>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+</div>
+
+<!-- ============ TOP COMMAND BAR ============ -->
+<header id="topbar">
+  <div class="brand">
+    <div class="logo">
+      <svg viewBox="0 0 40 40" width="34" height="34">
+        <defs>
+          <radialGradient id="lg" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#67e8f9"/><stop offset="100%" stop-color="#0891b2"/>
+          </radialGradient>
+        </defs>
+        <circle cx="20" cy="20" r="17" fill="none" stroke="url(#lg)" stroke-width="2" opacity=".9"/>
+        <path d="M6 20 L13 20 L16 12 L20 27 L23 17 L25 20 L34 20" fill="none" stroke="#22d3ee" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="20" cy="20" r="2.6" fill="#ef4444"><animate attributeName="opacity" values="1;.2;1" dur="1.2s" repeatCount="indefinite"/></circle>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <div class="brand-name">TracePulse <span>NCR</span></div>
+      <div class="brand-sub">Sub-Second Contamination Quarantine Engine</div>
+    </div>
+  </div>
+
+  <div class="top-status">
+    <div class="status-chip" id="net-chip">
+      <span class="pulse-dot"></span><span id="net-label">NETWORK NOMINAL</span>
+    </div>
+    <div class="clock-box">
+      <div class="clock-time" id="clock-time">--:--:--</div>
+      <div class="clock-date" id="clock-date">DELHI NCR · IST</div>
+    </div>
+    <div class="health-mini" id="health-mini" title="Graph engine status">
+      <span class="hm-label">GRAPH</span><span class="hm-val" id="hm-val">—</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ NAV TABS ============ -->
+<nav id="tabs">
+  <button class="tab active" data-tab="dashboard"><span class="ti">01</span>Operations Overview</button>
+  <button class="tab" data-tab="blast"><span class="ti">02</span>Blast Radius</button>
+  <button class="tab" data-tab="containment"><span class="ti">03</span>Containment</button>
+  <button class="tab" data-tab="reverse"><span class="ti">04</span>Reverse Trace</button>
+</nav>
+
+<main id="main">
+
+<!-- ===================== DASHBOARD ===================== -->
+<section class="view active" id="view-dashboard">
+  <div class="kpi-row" id="kpi-row">
+    <div class="kpi"><div class="kpi-label">NETWORK STATUS</div><div class="kpi-value" id="kpi-net">—</div><div class="kpi-foot" id="kpi-net-foot">loading…</div></div>
+    <div class="kpi"><div class="kpi-label">NCR KITCHENS ACTIVE</div><div class="kpi-value" id="kpi-kitchens">—</div><div class="kpi-foot" id="kpi-kitchens-foot">cloud kitchens</div></div>
+    <div class="kpi"><div class="kpi-label">BATCHES TRACKED</div><div class="kpi-value" id="kpi-batches">—</div><div class="kpi-foot">ingredient lots</div></div>
+    <div class="kpi"><div class="kpi-label">ORDERS INDEXED</div><div class="kpi-value" id="kpi-orders">—</div><div class="kpi-foot">today · Delhi NCR</div></div>
+    <div class="kpi kpi-accent"><div class="kpi-label">ACTIVE INCIDENTS</div><div class="kpi-value" id="kpi-incidents">—</div><div class="kpi-foot" id="kpi-incidents-foot">quarantine queue</div></div>
+  </div>
+
+  <div class="dash-grid">
+    <div class="panel cluster-panel">
+      <div class="panel-head"><h3>Delhi NCR Cluster Segmentation</h3><span class="tag">GEO-ZONES</span></div>
+      <div id="cluster-cards" class="cluster-cards"></div>
+      <div class="panel-head" style="margin-top:18px"><h3>Supplier & Warehouse Mesh</h3><span class="tag">UPSTREAM</span></div>
+      <div id="mesh-list" class="mesh-list"></div>
+    </div>
+
+    <div class="panel feed-panel">
+      <div class="panel-head"><h3>Live Incident Feed</h3><span class="live-tag"><span class="pulse-dot"></span>LIVE</span></div>
+      <div id="incident-feed" class="incident-feed"></div>
+      <div class="panel-head" style="margin-top:14px"><h3>System Telemetry</h3><span class="tag">API</span></div>
+      <div id="telemetry" class="telemetry"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== BLAST RADIUS ===================== -->
+<section class="view" id="view-blast">
+  <div class="blast-layout">
+    <div class="blast-controls panel">
+      <div class="panel-head"><h3>Rapid Incident Console</h3><span class="tag danger">QA LAB</span></div>
+      <p class="hint">Select a flagged ingredient batch, then initiate a downstream blast-radius traversal across the full supply graph.</p>
+
+      <label class="field-label">BATCH ID</label>
+      <div class="batch-picker" id="batch-picker"></div>
+
+      <div class="incident-banner" id="incident-banner" hidden>
+        <div class="ib-icon">⚠</div>
+        <div>
+          <div class="ib-title" id="ib-title">FSSAI LAB ALERT</div>
+          <div class="ib-sub" id="ib-sub">Batch flagged positive</div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-blast">
+        <span class="btn-icon">◎</span> INITIATE BLAST RADIUS ANALYSIS
+      </button>
+
+      <div class="latency-box" id="latency-box" hidden>
+        <div class="lat-num" id="lat-num">—</div>
+        <div class="lat-cap">graph traversal · <span id="lat-hops">5 hops</span></div>
+        <div class="lat-bar"><div class="lat-fill" id="lat-fill"></div></div>
+        <div class="lat-note">vs 45–180s relational 8-table join</div>
+      </div>
+
+      <div class="blast-kpis" id="blast-kpis" hidden>
+        <div class="bkpi"><div class="bkpi-v" id="bk-orders">0</div><div class="bkpi-l">Orders hit</div></div>
+        <div class="bkpi"><div class="bkpi-v" id="bk-kitchens">0</div><div class="bkpi-l">Kitchens</div></div>
+        <div class="bkpi"><div class="bkpi-v" id="bk-customers">0</div><div class="bkpi-l">Consumers</div></div>
+        <div class="bkpi danger"><div class="bkpi-v" id="bk-gmv">₹0</div><div class="bkpi-l">GMV at risk</div></div>
+      </div>
+
+      <div class="status-dist" id="status-dist" hidden>
+        <div class="sd-title">ORDER DISPOSITION</div>
+        <div class="sd-bar">
+          <div class="sd-seg seg-prep" id="seg-prep"></div>
+          <div class="sd-seg seg-transit" id="seg-transit"></div>
+          <div class="sd-seg seg-deliv" id="seg-deliv"></div>
+        </div>
+        <div class="sd-legend" id="sd-legend"></div>
+      </div>
+
+      <div class="breach-note" id="breach-note" hidden></div>
+    </div>
+
+    <div class="blast-graph panel">
+      <div class="panel-head">
+        <h3 id="graph-title">Downstream Propagation Graph</h3>
+        <span class="tag" id="graph-tag">IDLE</span>
+      </div>
+      <div class="graph-wrap">
+        <canvas id="graph-canvas"></canvas>
+        <div class="graph-empty" id="graph-empty">
+          <div class="ge-icon">⬡</div>
+          <div>Awaiting traversal</div>
+          <div class="ge-sub">Initiate blast radius to render the contamination tree</div>
+        </div>
+        <div class="graph-legend" id="graph-legend">
+          <span class="lg-item"><i style="background:#ef4444"></i>Batch</span>
+          <span class="lg-item"><i style="background:#a78bfa"></i>Warehouse</span>
+          <span class="lg-item"><i style="background:#fb923c"></i>Shipment</span>
+          <span class="lg-item"><i style="background:#34d399"></i>Kitchen</span>
+          <span class="lg-item"><i style="background:#fbbf24"></i>Dish</span>
+          <span class="lg-item"><i style="background:#60a5fa"></i>Orders</span>
+        </div>
+      </div>
+      <div class="affected-table-wrap" id="affected-table-wrap" hidden>
+        <div class="panel-head"><h3>Affected Order Ledger</h3><span class="tag" id="ledger-count">0</span></div>
+        <table class="ledger" id="ledger-table">
+          <thead><tr><th>ORDER</th><th>DISH</th><th>KITCHEN</th><th>STATUS</th><th>GMV</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTAINMENT ===================== -->
+<section class="view" id="view-containment">
+  <div class="contain-head">
+    <div class="panel severity-panel">
+      <div class="panel-head"><h3>Risk Severity Model</h3><span class="tag danger">DETERMINISTIC</span></div>
+      <div class="sev-score" id="sev-score">—</div>
+      <div class="sev-class" id="sev-class">Run blast radius first</div>
+      <div class="sev-formula" id="sev-formula"></div>
+    </div>
+    <div class="panel surgical-panel">
+      <div class="panel-head"><h3>Surgical vs Blanket Recall</h3><span class="tag">ROI</span></div>
+      <div class="surgical-copy">
+        A blanket shutdown discards <b>₹80,000</b> of safe food. TracePulse isolates only the recipes mapped
+        via <code>[:USES_BATCH]</code> to the flagged batch — <b class="ok">biryani, dal & breads stay LIVE</b>.
+      </div>
+      <div class="roi-bars">
+        <div class="roi-row"><span class="roi-label">Blanket recall loss</span><div class="roi-track"><div class="roi-fill bad" style="width:100%"></div></div><span class="roi-val">₹80.0k</span></div>
+        <div class="roi-row"><span class="roi-label">TracePulse loss</span><div class="roi-track"><div class="roi-fill good" id="roi-surgical" style="width:3%"></div></div><span class="roi-val ok" id="roi-surgical-val">≈₹0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="zones" id="zones"></div>
+
+  <div class="panel audit-panel">
+    <div class="panel-head"><h3>Containment Action Log</h3><span class="live-tag"><span class="pulse-dot"></span>AUDIT</span></div>
+    <div id="containment-log" class="containment-log"><div class="log-empty">No containment directives issued yet.</div></div>
+  </div>
+</section>
+
+<!-- ===================== REVERSE TRACE ===================== -->
+<section class="view" id="view-reverse">
+  <div class="reverse-layout">
+    <div class="panel reverse-controls">
+      <div class="panel-head"><h3>Reverse Root-Cause Trace</h3><span class="tag">CUSTOMER → FARM</span></div>
+      <p class="hint">A consumer reports illness. Enter their order ID to traverse upstream and pinpoint the exact source batch, warehouse, and supplier.</p>
+      <label class="field-label">ORDER ID</label>
+      <div class="order-input-row">
+        <input type="text" id="order-input" placeholder="e.g. ORD-8601" autocomplete="off"/>
+        <button class="btn-primary" id="btn-reverse"><span class="btn-icon">⇄</span> TRACE</button>
+      </div>
+      <div class="order-chips" id="order-chips"></div>
+      <div class="rev-latency" id="rev-latency" hidden>
+        <span class="rl-num" id="rl-num">—</span> upstream traversal · <span id="rl-hops">7 hops</span>
+      </div>
+      <div class="rev-verdict" id="rev-verdict" hidden></div>
+    </div>
+    <div class="panel reverse-path">
+      <div class="panel-head"><h3>Chain of Custody</h3><span class="tag" id="rev-tag">IDLE</span></div>
+      <div class="path-track" id="path-track">
+        <div class="graph-empty" id="rev-empty"><div class="ge-icon">⇄</div><div>No trace run yet</div><div class="ge-sub">Enter an order ID to reconstruct the farm-to-fork path</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div id="toast-stack"></div>
+
+<button id="btn-autodemo" title="Plays the full judging storyline: lab alert → blast radius → surgical containment → reverse trace">
+  ▶ AUTO-RUN 4-MIN DEMO
+</button>
+
+<footer id="footer">
+  <span>TracePulse NCR · Neo4j index-free adjacency · FSS Act §28 trace-ready</span>
+  <span id="footer-meta">hackathon prototype</span>
+</footer>
+
+<script src="graph.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
