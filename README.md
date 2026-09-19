@@ -1,17 +1,3 @@
-# TracePulse NCR — Next.js + FastAPI + AI Copilot
-
-> Sub-second contamination blast-radius & quarantine engine for Delhi NCR cloud kitchens.
-> **Graph-native deterministic core + LLM copilot that orchestrates graph tools — zero hallucinated numbers.**
-
-```
-┌ Next.js 14 (App Router, TS) ──────────────┐        ┌ FastAPI (async monolith) ─────────────┐
-│ Mission-control UI · canvas graph engine  │  HTTP  │ REST contract (PART 17)               │
-│ Copilot drawer — SSE streaming chat       │ ─────► │ AI agent: tool-calling loop           │
-│ /api/* rewrite proxy (single origin)      │  SSE   │ Graph core: index-free adjacency      │
-└───────────────────────────────────────────┘        │ Deterministic fallback intent-router  │
-                                                      └──────────────┬────────────────────────┘
-                                                                     │ (swap-in) Neo4j AuraDB via Bolt
-```
 
 ## Run it
 
